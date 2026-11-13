@@ -1,3 +1,6 @@
+-- ==========================================
+-- SCRIPT COMPLETO - CHRISTIAN PRIV (MOBILE)
+-- ==========================================
 
 local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
 
@@ -6,9 +9,8 @@ WindUI:SetTheme("Dark")
 
 local Window = WindUI:CreateWindow({
     Title = "Christian Priv",
-    Author = "Versión 1.0",
     Folder = "PrivateChris_Mobile",
-    Size = UDim2.fromOffset(480, 360), 
+    Size = UDim2.fromOffset(500, 420),
     Theme = "Dark",
     HidePanelBackground = false,
     NewElements = false,
@@ -33,7 +35,6 @@ local statsService = game:GetService("Stats")
 local lighting = game:GetService("Lighting")
 local virtualInputManager = game:GetService("VirtualInputManager")
 local workspaceService = game:GetService("Workspace")
-local starterGui = game:GetService("StarterGui")
 local userInputService = game:GetService("UserInputService")
 local virtualUser = game:GetService("VirtualUser")
 local runService = game:GetService("RunService")
@@ -54,6 +55,27 @@ local function formatNum(p1)
         end
     end
     return tostring(math.floor(p1))
+end
+
+local function fmtRate(r)
+    return "Per second: " .. formatNum(r) ..
+        "\nPer minute: " .. formatNum(r * 60) ..
+        "\nPer hour: " .. formatNum(r * 3600) ..
+        "\nPer day: " .. formatNum(r * 86400) ..
+        "\nPer week: " .. formatNum(r * 604800)
+end
+
+local function getStats()
+    local ls = localPlayer:FindFirstChild("leaderstats")
+    if not ls then return { Str = 0, Dur = 0, Reb = 0 } end
+    local s = ls:FindFirstChild("Strength")
+    local d = ls:FindFirstChild("Durability")
+    local r = ls:FindFirstChild("Rebirths")
+    return {
+        Str = s and s.Value or 0,
+        Dur = d and d.Value or 0,
+        Reb = r and r.Value or 0,
+    }
 end
 
 task.spawn(function()
@@ -85,7 +107,7 @@ task.spawn(function()
         uiCorner.Parent = frame
         
         local frame2 = Instance.new("Frame")
-        frame2.BackgroundColor3 = Color3.fromRGB(153, 0, 0) -- Rojo Rubí
+        frame2.BackgroundColor3 = Color3.fromRGB(153, 0, 0)
         frame2.Size = UDim2.new(1, 0, 1, 0)
         frame2.BorderSizePixel = 0
         frame2.Parent = frame
@@ -132,15 +154,187 @@ task.spawn(function()
     end)
 end)
 
+-- ==========================================
+-- AUTOMATIZACIÓN DE BOSSES
+-- ==========================================
+local REGULAR_BOSS_NAMES = {"Boss1", "Boss2", "Boss3", "Boss4", "Boss5", "RainbowBoss"}
+local REGULAR_BOSS_FULL = {
+    ["Boss1"]="Common Boss", ["Boss2"]="Rare Boss", ["Boss3"]="Epic Boss",
+    ["Boss4"]="Legendary Boss", ["Boss5"]="Mythical Boss", ["RainbowBoss"]="Rainbow Boss"
+}
 
+local SelectedBosses = {}
+for _, n in ipairs(REGULAR_BOSS_NAMES) do SelectedBosses[n] = true end
+
+local BossState = { AutoFarmBoss = false, CurrentBoss = "None" }
+local BossCache = { Arena = nil, LastCheck = 0 }
+
+local function getBossTargets()
+    local bosses, seen = {}, {}
+    local myChar = localPlayer.Character
+    local function add(m)
+        if m and m:IsA("Model") and m ~= myChar and not seen[m] and m:IsDescendantOf(workspaceService) then
+            if not SelectedBosses[m.Name] then return end
+            seen[m] = true; table.insert(bosses, m)
+        end
+    end
+    if (not BossCache.Arena or not BossCache.Arena.Parent) and tick() - (BossCache.LastCheck or 0) >= 2 then
+        BossCache.LastCheck = tick()
+        local events = workspaceService:FindFirstChild("Events")
+        BossCache.Arena = events and events:FindFirstChild("BossArena")
+        if not BossCache.Arena then
+            for _, v in ipairs(workspaceService:GetDescendants()) do
+                if v.Name == "BossArena" and v:IsA("Folder") then BossCache.Arena = v; break end
+            end
+        end
+    end
+    if BossCache.Arena then for _, obj in ipairs(BossCache.Arena:GetChildren()) do if SelectedBosses[obj.Name] then add(obj) end end end
+    for _, m in ipairs(game:GetService("CollectionService"):GetTagged("BossEventBoss")) do if SelectedBosses[m.Name] then add(m) end end
+    return bosses
+end
+
+local function ensureBossHitbox(model)
+    if not model then return nil end
+    local existing = model:FindFirstChild("Hitbox")
+    if existing and existing:IsA("BasePart") then return existing end
+    local rootPart = model:FindFirstChild("BossDamageHitbox", true) or model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso") or model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+    if not rootPart then return nil end
+    local hitbox = Instance.new("Part")
+    hitbox.Name = "Hitbox"; hitbox.Size = Vector3.new(12, 12, 12); hitbox.Transparency = 1
+    hitbox.CanCollide = false; hitbox.CanQuery = true; hitbox.CanTouch = true; hitbox.Massless = true; hitbox.Anchored = false
+    hitbox.CFrame = rootPart.CFrame
+    local weld = Instance.new("WeldConstraint"); weld.Part0 = rootPart; weld.Part1 = hitbox; weld.Parent = hitbox
+    hitbox.Parent = model
+    return hitbox
+end
+
+local function readBossHealth(model)
+    local stats = model:FindFirstChild("stats")
+    local hp = stats and stats:FindFirstChild("Health")
+    local mx = stats and stats:FindFirstChild("MaxHealth")
+    if hp and hp:IsA("ValueBase") and type(hp.Value) == "number" then return hp.Value, (mx and tonumber(mx.Value)) or hp.Value end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if hum then return hum.Health, hum.MaxHealth end
+    local attr = tonumber(model:GetAttribute("Health"))
+    if attr then return attr, tonumber(model:GetAttribute("MaxHealth")) or attr end
+    return nil, nil
+end
+
+local function bossAttackOnce(model, hitbox)
+    local character = localPlayer.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not root or not humanoid or humanoid.Health <= 0 then return end
+    local backpack = localPlayer:FindFirstChild("Backpack")
+    local punch = character:FindFirstChild("Punch") or (backpack and backpack:FindFirstChild("Punch"))
+    if punch and punch.Parent == backpack then humanoid:EquipTool(punch) end
+    local head = model:FindFirstChild("Head", true)
+    local headPos = head and head.Position or (hitbox.Position + Vector3.new(0, hitbox.Size.Y * 0.35, 0))
+    root.CFrame = CFrame.lookAt(headPos + Vector3.new(0, 8, 0), headPos)
+    root.AssemblyLinearVelocity = Vector3.zero; root.AssemblyAngularVelocity = Vector3.zero
+    local leftHand = character:FindFirstChild("LeftHand"); local rightHand = character:FindFirstChild("RightHand")
+    if leftHand and rightHand then
+        pcall(function()
+            firetouchinterest(hitbox, rightHand, 0); firetouchinterest(hitbox, rightHand, 1)
+            firetouchinterest(hitbox, leftHand, 0); firetouchinterest(hitbox, leftHand, 1)
+        end)
+    end
+    local ev = localPlayer:FindFirstChild("muscleEvent") or localPlayer:FindFirstChild("MuscleEvent")
+    if ev then pcall(function() ev:FireServer("punch", "leftHand"); ev:FireServer("punch", "rightHand") end) end
+    if punch and punch.Parent == character then pcall(function() punch:Activate() end) end
+end
+
+local claimedBossChests = setmetatable({}, { __mode = "k" })
+local function findBossChest()
+    for _, c in ipairs(game:GetService("CollectionService"):GetTagged("BossEventChest")) do
+        if c:IsDescendantOf(workspaceService) and not claimedBossChests[c] then
+            local prompt = c:FindFirstChild("bossChestPrompt", true)
+            local part = (prompt and prompt.Parent) or (c:IsA("BasePart") and c) or (c:IsA("Model") and (c.PrimaryPart or c:FindFirstChildWhichIsA("BasePart", true)))
+            if part and part:IsA("BasePart") then return c, prompt, part end
+        end
+    end
+    for _, d in ipairs(workspaceService:GetDescendants()) do
+        if d:IsA("ProximityPrompt") and d.Name == "bossChestPrompt" then
+            local p = d.Parent
+            if p and p:IsA("Attachment") then p = p.Parent end
+            if p and p:IsA("BasePart") and not claimedBossChests[p] then return p, d, p end
+        end
+    end
+    return nil
+end
+
+local function claimBossChest(chest, prompt, part)
+    claimedBossChests[chest] = true
+    task.wait(0.3)
+    local char = localPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if root and part.Parent then pcall(function() root.CFrame = CFrame.lookAt(part.Position + Vector3.new(0, 3, 4), part.Position); root.AssemblyLinearVelocity = Vector3.zero end) end
+    task.wait(0.2)
+    local attempts = 0
+    while BossState.AutoFarmBoss and chest.Parent and attempts < 6 do
+        attempts = attempts + 1
+        local fired = false
+        if prompt and prompt.Parent and type(fireproximityprompt) == "function" then fired = pcall(fireproximityprompt, prompt) end
+        if not fired then pcall(function() virtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game); task.wait(0.1); virtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game) end) end
+        task.wait(0.5)
+    end
+end
+
+local function startAutoFarmBoss()
+    if BossState.AutoFarmBoss then return end
+    BossState.AutoFarmBoss = true
+    local lastChestCheck = 0
+    task.spawn(function()
+        while BossState.AutoFarmBoss do
+            pcall(function()
+                local chest, prompt, part
+                if tick() - lastChestCheck >= 1 then lastChestCheck = tick(); chest, prompt, part = findBossChest() end
+                if chest and part and chest:GetAttribute("BossChestEmerging") ~= true then
+                    BossState.CurrentBoss = "Claiming chest..."
+                    claimBossChest(chest, prompt, part); return
+                end
+                local char = localPlayer.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                local target, bestDist = nil, math.huge
+                for _, m in ipairs(getBossTargets()) do
+                    local hp = readBossHealth(m)
+                    if hp == nil or hp > 0 then
+                        local part2 = m:FindFirstChild("BossDamageHitbox", true) or m.PrimaryPart or m:FindFirstChildWhichIsA("BasePart", true)
+                        local d = (hrp and part2) and (hrp.Position - part2.Position).Magnitude or 0
+                        if d < bestDist then target, bestDist = m, d end
+                    end
+                end
+                if not target then BossState.CurrentBoss = "Waiting for boss..."; return end
+                local hitbox = target:FindFirstChild("BossDamageHitbox", true)
+                if not (hitbox and hitbox:IsA("BasePart")) then hitbox = ensureBossHitbox(target) end
+                if not hitbox then return end
+                BossState.CurrentBoss = REGULAR_BOSS_FULL[target.Name] or target.Name
+                bossAttackOnce(target, hitbox)
+            end)
+            task.wait(0.01)
+        end
+    end)
+end
+
+local function stopAutoFarmBoss()
+    BossState.AutoFarmBoss = false; BossState.CurrentBoss = "None"
+    local char = localPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if hrp then pcall(function() hrp.Anchored = false end) end
+    local arena = BossCache.Arena
+    if arena then for _, obj in ipairs(arena:GetChildren()) do if obj:IsA("Model") then local hb = obj:FindFirstChild("Hitbox"); if hb then hb:Destroy() end end end end
+end
+
+-- ==========================================
+-- 1. PESTAÑA: SPEED FARM
+-- ==========================================
 local speedFarmTab = Window:Tab({ Title = "Speed Farm", Icon = "zap" })
-local speedSection = speedFarmTab:Section({ Title = "Estadísticas y Control", Content = "Información en tiempo real" })
+local speedSection = speedFarmTab:Section({ Title = "Estadísticas y Control" })
 
 local fastRepTimeLbl = speedSection:Paragraph({ Title = "Fast Rep Time", Desc = "0d 0h 0m 0s" })
-local strengthRateLbl = speedSection:Paragraph({ Title = "Strength Rate", Desc = "0 /Hour | 0 /Day" })
-local durabilityRateLbl = speedSection:Paragraph({ Title = "Durability Rate", Desc = "0 /Hour | 0 /Day" })
+local strengthRateLbl = speedSection:Paragraph({ Title = "Strength Rate", Desc = fmtRate(0) })
+local durabilityRateLbl = speedSection:Paragraph({ Title = "Durability Rate", Desc = fmtRate(0) })
 
-speedSection:Paragraph({ Title = "Stats Actuales", Desc = "Progreso en tiempo real" })
 local strengthStatsLbl = speedSection:Paragraph({ Title = "Strength", Desc = "0 | Gained: 0" })
 local durabilityStatsLbl = speedSection:Paragraph({ Title = "Durability", Desc = "0 | Gained: 0" })
 
@@ -159,6 +353,31 @@ speedSection:Toggle({
     Default = false,
     Callback = function(state)
         getgenv()._AutoRepFarmEnabled = state
+    end
+})
+
+local autoEquipWeightActive = false
+speedSection:Toggle({
+    Title = "Auto Equip Weight",
+    Default = false,
+    Callback = function(state)
+        autoEquipWeightActive = state
+        if state then
+            task.spawn(function()
+                while autoEquipWeightActive do
+                    local char = localPlayer.Character
+                    local backpack = localPlayer:FindFirstChild("Backpack")
+                    if char and backpack then
+                        for _, tool in ipairs(backpack:GetChildren()) do
+                            if tool:IsA("Tool") and string.find(string.lower(tool.Name), "weight") then
+                                tool.Parent = char
+                            end
+                        end
+                    end
+                    task.wait(1)
+                end
+            end)
+        end
     end
 })
 
@@ -182,21 +401,22 @@ task.spawn(function()
     end
 end)
 
-local leaderstats = localPlayer:WaitForChild("leaderstats")
-local strength = leaderstats:WaitForChild("Strength")
-local durability = localPlayer:WaitForChild("Durability")
-
-local initialStrength = strength.Value
-local initialDurability = durability.Value
-local startTimeTick = tick()
-local strHistory, durHistory = {}, {}
-
 task.spawn(function()
-    local lastUpdate = tick()
+    task.wait(2)
+    local initialStats = getStats()
+    local initialStrength = initialStats.Str
+    local initialDurability = initialStats.Dur
+    local startTimeTick = tick()
+
+    local lastSampleTime = tick()
+    local lastSampleStr = initialStrength
+    local lastSampleDur = initialDurability
+
     while true do
         local currentTime = tick()
-        local currentStr = strength.Value
-        local currentDur = durability.Value
+        local stats = getStats()
+        local currentStr = stats.Str
+        local currentDur = stats.Dur
         local elapsed = currentTime - startTimeTick
         
         local days = math.floor(elapsed / 86400)
@@ -206,24 +426,17 @@ task.spawn(function()
         
         fastRepTimeLbl:SetDesc(string.format("%dd %dh %dm %ds", days, hours, minutes, seconds))
         strengthStatsLbl:SetDesc("Strength: " .. formatNum(currentStr) .. " | Gained: " .. formatNum(currentStr - initialStrength))
-        durabilityStatsLbl:SetDesc("Durability: " .. formatNum(currentDur) .. " | Gained: " .. formatNum(currentDur - initialDur))
+        durabilityStatsLbl:SetDesc("Durability: " .. formatNum(currentDur) .. " | Gained: " .. formatNum(currentDur - initialDurability))
         
-        table.insert(strHistory, { time = currentTime, value = currentStr })
-        table.insert(durHistory, { time = currentTime, value = currentDur })
-        
-        while #strHistory > 0 and currentTime - strHistory[1].time > 10 do table.remove(strHistory, 1) end
-        while #durHistory > 0 and currentTime - durHistory[1].time > 10 do table.remove(durHistory, 1) end
-        
-        if currentTime - lastUpdate >= 2 then 
-            lastUpdate = currentTime
-            if #strHistory >= 2 then
-                local rate = (strHistory[#strHistory].value - strHistory[1].value) / 2
-                strengthRateLbl:SetDesc(string.format("%s/Hour | %s/Day", formatNum(math.floor(rate * 3600)), formatNum(math.floor(rate * 86400))))
-            end
-            if #durHistory >= 2 then
-                local rate = (durHistory[#durHistory].value - durHistory[1].value) / 2
-                durabilityRateLbl:SetDesc(string.format("%s/Hour | %s/Day", formatNum(math.floor(rate * 3600)), formatNum(math.floor(rate * 86400))))
-            end
+        local dt = currentTime - lastSampleTime
+        if dt >= 10 then
+            local strPerSec = (currentStr - lastSampleStr) / dt
+            local durPerSec = (currentDur - lastSampleDur) / dt
+            strengthRateLbl:SetDesc(fmtRate(strPerSec))
+            durabilityRateLbl:SetDesc(fmtRate(durPerSec))
+            lastSampleTime = currentTime
+            lastSampleStr = currentStr
+            lastSampleDur = currentDur
         end
         task.wait(1) 
     end
@@ -240,13 +453,15 @@ task.spawn(function()
     while true do
         if autoEggActive then
             pcall(function()
-                local backpack = localPlayer:WaitForChild("Backpack")
-                local char = localPlayer.Character or localPlayer.CharacterAdded:Wait()
+                local backpack = localPlayer:FindFirstChild("Backpack")
+                local char = localPlayer.Character
                 local event = localPlayer:FindFirstChild("muscleEvent")
-                local proteinEgg = backpack:FindFirstChild("Protein Egg") or char:FindFirstChild("Protein Egg")
-                if proteinEgg and event then
-                    if proteinEgg.Parent ~= char then proteinEgg.Parent = char end
-                    event:FireServer("proteinEgg", proteinEgg)
+                if backpack and char and event then
+                    local proteinEgg = backpack:FindFirstChild("Protein Egg") or char:FindFirstChild("Protein Egg")
+                    if proteinEgg then
+                        if proteinEgg.Parent ~= char then proteinEgg.Parent = char end
+                        event:FireServer("proteinEgg", proteinEgg)
+                    end
                 end
             end)
             task.wait(1800)
@@ -267,7 +482,11 @@ speedSection:Dropdown({
 speedSection:Button({
     Title = "Usar Squat Seleccionado",
     Callback = function()
-        local hrp = (localPlayer.Character or localPlayer.CharacterAdded:Wait()):WaitForChild("HumanoidRootPart")
+        local char = localPlayer.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        
         if selectedSquat == "Industrial Squat" then
             hrp.CFrame = CFrame.new(-5217.11523, 61.0028, 5418.07715)
         elseif selectedSquat == "Jungle Squat" then
@@ -304,20 +523,18 @@ speedSection:Button({
                 obj.Reflectance = 0
             end
         end
-        WindUI:Notify({ Title = "Anti Lag", Content = "Optimización aplicada con éxito.", Duration = 4 })
+        WindUI:Notify({ Title = "Anti Lag Activado", Duration = 4 })
     end
 })
 
 -- ==========================================
--- 2. PESTAÑA: REBIRTHS (Unificada: Pets + Normal)
+-- 2. PESTAÑA: REBIRTHS
 -- ==========================================
 local rebirthsTab = Window:Tab({ Title = "Rebirths", Icon = "repeat" })
 
--- Sección 1: Fast Rebirth con Mascotas
-local rbSectionPets = rebirthsTab:Section({ Title = "Fast Rebirth (Con Mascotas)", Content = "Gestión con Eclipse Devourer" })
+local rbSectionPets = rebirthsTab:Section({ Title = "Fast Rebirth (Con Mascotas)" })
 
-local rebirthsStat = leaderstats:WaitForChild("Rebirths")
-local bestPets = { "Swift Samurai", "Omega Overlord", "Mythic Boss Pet", "Legendary Boss Pet", "Rainbow Boss Pet", "Epic Boss Pet", "Rare Boss Pet", "Common Boss Pet", "Zeus Spark", "Ares Ironfang" }
+local bestPets = { "Swift Samurai", "Omega Overlord", "Mythic Boss Pet", "Legendary Boss Pet", "Rainbow Boss Pet", "Zeus Spark", "Ares Ironfang" }
 local eclipsePets = { "Tribal Overlord", "Titanium Hydra", "Eclipse Devourer" }
 
 local rbTimeLbl = rbSectionPets:Paragraph({ Title = "Tiempo", Desc = "0d 0h 0m 0s" })
@@ -325,13 +542,13 @@ local rbStatsLbl = rbSectionPets:Paragraph({ Title = "Renacimientos", Desc = "0 
 local reqStrengthLbl = rbSectionPets:Paragraph({ Title = "Fuerza Necesaria", Desc = "0" })
 
 local function getRequiredStrength()
-    return math.floor(5000 + 2500 * rebirthsStat.Value)
+    return math.floor(5000 + 2500 * getStats().Reb)
 end
 
-local sessionStartRebirths = rebirthsStat.Value
-local rbStartTime = tick()
-
 task.spawn(function()
+    task.wait(2)
+    local sessionStartRebirths = getStats().Reb
+    local rbStartTime = tick()
     while true do
         local elapsed = tick() - rbStartTime
         local days = math.floor(elapsed / 86400)
@@ -340,8 +557,9 @@ task.spawn(function()
         local seconds = math.floor(elapsed % 60)
         
         rbTimeLbl:SetDesc(string.format("%dd %dh %dm %ds", days, hours, minutes, seconds))
-        local g = rebirthsStat.Value - sessionStartRebirths
-        rbStatsLbl:SetDesc("Renacimientos: " .. formatNum(rebirthsStat.Value) .. " | Ganados: " .. formatNum(g))
+        local currentReb = getStats().Reb
+        local g = currentReb - sessionStartRebirths
+        rbStatsLbl:SetDesc("Renacimientos: " .. formatNum(currentReb) .. " | Ganados: " .. formatNum(g))
         reqStrengthLbl:SetDesc("Fuerza Necesaria: " .. formatNum(getRequiredStrength()))
         task.wait(1)
     end
@@ -380,38 +598,57 @@ local function equipSpecificPets(petList, limit)
 end
 
 getgenv().AutoFarming = false
+
+-- FUNCIÓN DE FAST REBIRTH CON MASCOTAS (CON PAUSA FLUIDA PARA BRAWL)
+task.spawn(function()
+    while true do
+        if getgenv().AutoFarming or getgenv().RebirthsBrawlActive then
+            pcall(function()
+                unequipAllPets()
+                equipSpecificPets(bestPets, 12)
+                
+                while (getgenv().AutoFarming or getgenv().RebirthsBrawlActive) do
+                    if inBrawlSession then
+                        task.wait(0.5)
+                    else
+                        local req = getRequiredStrength()
+                        while getStats().Str < req and (getgenv().AutoFarming or getgenv().RebirthsBrawlActive) and not inBrawlSession do
+                            if localPlayer:FindFirstChild("muscleEvent") then
+                                for _ = 1, 31 do
+                                    localPlayer.muscleEvent:FireServer("rep")
+                                end
+                            end
+                            task.wait()
+                        end
+                        
+                        if not (getgenv().AutoFarming or getgenv().RebirthsBrawlActive) then break end
+                        if not inBrawlSession then
+                            unequipAllPets()
+                            equipSpecificPets(eclipsePets, 12)
+                            local currentRb = getStats().Reb
+                            repeat
+                                replicatedStorage.rEvents.rebirthRemote:InvokeServer("rebirthRequest")
+                                task.wait(0.2)
+                            until getStats().Reb > currentRb or not (getgenv().AutoFarming or getgenv().RebirthsBrawlActive) or inBrawlSession
+                            
+                            if (getgenv().AutoFarming or getgenv().RebirthsBrawlActive) and not inBrawlSession then
+                                unequipAllPets()
+                                equipSpecificPets(bestPets, 12)
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+        task.wait(0.5)
+    end
+end)
+
 rbSectionPets:Toggle({
     Title = "Fast Rebirth (Con Mascotas)",
     Default = false,
     Callback = function(state)
         getgenv().AutoFarming = state
-        if state then
-            task.spawn(function()
-                unequipAllPets()
-                equipSpecificPets(bestPets, 12)
-                while getgenv().AutoFarming do
-                    local req = getRequiredStrength()
-                    while strength.Value < req and getgenv().AutoFarming do
-                        for _ = 1, 31 do
-                            localPlayer.muscleEvent:FireServer("rep")
-                        end
-                        task.wait()
-                    end
-                    if not getgenv().AutoFarming then break end
-                    unequipAllPets()
-                    equipSpecificPets(eclipsePets, 12)
-                    local currentRb = rebirthsStat.Value
-                    repeat
-                        replicatedStorage.rEvents.rebirthRemote:InvokeServer("rebirthRequest")
-                        task.wait(0.2)
-                    until rebirthsStat.Value > currentRb or not getgenv().AutoFarming
-                    if getgenv().AutoFarming then
-                        unequipAllPets()
-                        equipSpecificPets(bestPets, 12)
-                    end
-                end
-            end)
-        end
     end
 })
 
@@ -426,7 +663,11 @@ rbSectionPets:Dropdown({
 rbSectionPets:Button({
     Title = "Usar Lift Seleccionado",
     Callback = function()
-        local hrp = (localPlayer.Character or localPlayer.CharacterAdded:Wait()):WaitForChild("HumanoidRootPart")
+        local char = localPlayer.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        
         if selectedLift == "Industrial Lift" then
             hrp.CFrame = CFrame.new(-5492.70068, 61.0028, 4643.64258)
         elseif selectedLift == "Zero Degrees Bar Lift 1" then
@@ -483,17 +724,16 @@ rbSectionPets:Toggle({
     end
 })
 
--- Sección 2: Fast Rebirth Normal (Dentro de la misma pestaña Rebirths)
-local rbSectionNormal = rebirthsTab:Section({ Title = "Fast Rebirth Normal", Content = "Sin cambio de mascotas" })
-
-local startTimeNew = tick()
-local sessionRebirthsNew = rebirthsStat.Value
+local rbSectionNormal = rebirthsTab:Section({ Title = "Fast Rebirth Normal" })
 
 local timeLabelNew = rbSectionNormal:Paragraph({ Title = "Time", Desc = "0d 0h 0m 0s" })
 local gainedLabelNew = rbSectionNormal:Paragraph({ Title = "Gained Rebirths", Desc = "0" })
 local fuerzaNecesariaNew = rbSectionNormal:Paragraph({ Title = "Fuerza Necesaria", Desc = "0" })
 
 task.spawn(function()
+    task.wait(2)
+    local startTimeNew = tick()
+    local sessionRebirthsNew = getStats().Reb
     while true do
         local elapsed = tick() - startTimeNew
         local days = math.floor(elapsed / 86400)
@@ -502,7 +742,7 @@ task.spawn(function()
         local seconds = math.floor(elapsed % 60)
         timeLabelNew:SetDesc(string.format("%dd %dh %dm %ds", days, hours, minutes, seconds))
 
-        local gainedRebirths = rebirthsStat.Value - sessionRebirthsNew
+        local gainedRebirths = getStats().Reb - sessionRebirthsNew
         gainedLabelNew:SetDesc(tostring(gainedRebirths))
         fuerzaNecesariaNew:SetDesc(formatNum(getRequiredStrength()))
         
@@ -522,7 +762,7 @@ rbSectionNormal:Toggle({
                 while getgenv().AutoFarmingNormal do
                     local backpack = localPlayer:FindFirstChild("Backpack")
                     local character = localPlayer.Character
-                    if backpack then
+                    if backpack and character then
                         for _, tool in ipairs(backpack:GetChildren()) do
                             if tool:IsA("Tool") and (tool.Name:find("Bar") or tool.Name:find("Weight") or tool.Name:find("Bottle") or tool.Name:find("Pushups") or tool.Name:find("Handstands")) then
                                 tool.Parent = character
@@ -531,18 +771,20 @@ rbSectionNormal:Toggle({
                     end
 
                     local rounded19 = getRequiredStrength()
-                    while strength.Value < rounded19 and getgenv().AutoFarmingNormal do
-                        for n = 1, 31 do
-                            localPlayer.muscleEvent:FireServer("rep")
+                    while getStats().Str < rounded19 and getgenv().AutoFarmingNormal do
+                        if localPlayer:FindFirstChild("muscleEvent") then
+                            for n = 1, 31 do
+                                localPlayer.muscleEvent:FireServer("rep")
+                            end
                         end
                         task.wait()
                     end
                     if not getgenv().AutoFarmingNormal then break end
-                    local value20 = rebirthsStat.Value
+                    local value20 = getStats().Reb
                     repeat
                         replicatedStorage.rEvents.rebirthRemote:InvokeServer("rebirthRequest")
                         task.wait(0.2)
-                        v26 = rebirthsStat.Value > value20 or not getgenv().AutoFarmingNormal
+                        v26 = getStats().Reb > value20 or not getgenv().AutoFarmingNormal
                     until v26
                 end
             end)
@@ -550,12 +792,295 @@ rbSectionNormal:Toggle({
     end
 })
 
+-- ==========================================
+-- 3. PESTAÑA: BOSSES
+-- ==========================================
+local bossesTab = Window:Tab({ Title = "Bosses", Icon = "crown" })
+local bossSectionMain = bossesTab:Section({ Title = "Boss Automation" })
+
+local bossStatusLbl = bossSectionMain:Paragraph({ Title = "Current Boss", Desc = "None" })
+
+task.spawn(function()
+    while true do
+        if BossState.AutoFarmBoss then
+            bossStatusLbl:SetDesc(BossState.CurrentBoss)
+        end
+        task.wait(0.5)
+    end
+end)
+
+bossSectionMain:Toggle({
+    Title = "Auto Farm Arena Bosses",
+    Default = false,
+    Callback = function(v)
+        if v then startAutoFarmBoss() else stopAutoFarmBoss() end
+    end
+})
+
+local bossSectionSelect = bossesTab:Section({ Title = "Arena Boss Selection" })
+for _, bossName in ipairs(REGULAR_BOSS_NAMES) do
+    local exactName = REGULAR_BOSS_FULL[bossName] or bossName
+    bossSectionSelect:Toggle({
+        Title = exactName,
+        Default = SelectedBosses[bossName] == true,
+        Callback = function(v) SelectedBosses[bossName] = v end
+    })
+end
 
 -- ==========================================
--- 3. PESTAÑA: EXTRAS & UTILIDADES
+-- 4. PESTAÑA: AUTO BRAWL (NUEVA E INTEGRADA)
+-- ==========================================
+local brawlTab = Window:Tab({ Title = "Auto Brawl", Icon = "swords" })
+local brawlSection = brawlTab:Section({ Title = "Configuración de Brawl" })
+
+getgenv().AutoJoinBrawl = false
+brawlSection:Toggle({
+    Title = "Auto Entrar a Brawl (Modo Inteligente)",
+    Default = false,
+    Callback = function(state)
+        getgenv().AutoJoinBrawl = state
+    end
+})
+
+getgenv().OnlyAutoJoinBrawl = false
+brawlSection:Toggle({
+    Title = "Solo Auto Entrar (AFK)",
+    Default = false,
+    Callback = function(state)
+        getgenv().OnlyAutoJoinBrawl = state
+    end
+})
+
+getgenv().RebirthsBrawlActive = false
+brawlSection:Toggle({
+    Title = "Rebirths+Brawl",
+    Default = false,
+    Callback = function(state)
+        getgenv().RebirthsBrawlActive = state
+    end
+})
+
+getgenv().AutoBrawlKill = false
+local targetPlayerNameInput = ""
+
+brawlSection:Input({
+    Title = "Cuenta Prioritaria (Opcional)",
+    Value = "",
+    Callback = function(v)
+        targetPlayerNameInput = v
+    end
+})
+
+brawlSection:Toggle({
+    Title = "Auto Matar en Ring (Automático)",
+    Default = false,
+    Callback = function(state)
+        getgenv().AutoBrawlKill = state
+    end
+})
+
+local wildWizardPets = { "Wild Wizard", "Wild Wizards" }
+local function equipWildWizards()
+    local petsFolder = localPlayer:FindFirstChild("petsFolder")
+    if not petsFolder then return end
+    local count = 0
+    local folderList = petsFolder:GetChildren()
+    for i = 1, #folderList do
+        local folder = folderList[i]
+        if folder:IsA("Folder") then
+            local petsInFolder = folder:GetChildren()
+            for j = 1, #petsInFolder do
+                local pet = petsInFolder[j]
+                for k = 1, #wildWizardPets do
+                    if string.find(string.lower(pet.Name), string.lower(wildWizardPets[k])) then
+                        replicatedStorage.rEvents.equipPetEvent:FireServer("equipPet", pet)
+                        count = count + 1
+                        if count >= 12 then return end
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- Detección estricta de rivales dentro del ring de Brawl
+local function getBrawlTarget()
+    if not inBrawlSession then return nil end
+
+    if targetPlayerNameInput ~= "" then
+        local specific = players:FindFirstChild(targetPlayerNameInput)
+        if specific and specific ~= localPlayer and specific.Character then
+            local hum = specific.Character:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 then
+                return specific
+            end
+        end
+    end
+
+    local myChar = localPlayer.Character
+    local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+
+    local playerList = players:GetPlayers()
+    for i = 1, #playerList do
+        local p = playerList[i]
+        if p ~= localPlayer and p.Character then
+            local hum = p.Character:FindFirstChildOfClass("Humanoid")
+            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+            if hum and hum.Health > 0 and hrp then
+                local inBrawlFlag = p:FindFirstChild("inBrawl") or p:GetAttribute("inBrawl")
+                local isEnemyInBrawl = (inBrawlFlag == true or (typeof(inBrawlFlag) == "Instance" and inBrawlFlag.Value == true))
+                
+                if isEnemyInBrawl or (myHrp and (myHrp.Position - hrp.Position).Magnitude < 130) then
+                    return p
+                end
+            end
+        end
+    end
+    return nil
+end
+
+inBrawlSession = false
+local previousState = {
+    SavedPosition = nil,
+    ActiveToolName = nil
+}
+
+replicatedStorage.rEvents.brawlEvent.OnClientEvent:Connect(function(action)
+    if action == "brawlStarting" then
+        if getgenv().OnlyAutoJoinBrawl and not getgenv().AutoJoinBrawl then
+            local char = localPlayer.Character
+            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+            if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end
+            task.wait(0.05)
+            pcall(function()
+                replicatedStorage.rEvents.brawlEvent:FireServer("joinBrawl")
+            end)
+            return
+        end
+
+        if (getgenv().AutoJoinBrawl or getgenv().RebirthsBrawlActive) and not inBrawlSession then
+            inBrawlSession = true
+
+            local char = localPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+
+            -- 1. Guardar posición actual
+            if hrp then
+                previousState.SavedPosition = hrp.CFrame
+            end
+
+            -- 2. Guardar y desequipar la pesa de la mano a la mochila
+            previousState.ActiveToolName = nil
+            if char then
+                local charChildren = char:GetChildren()
+                for i = 1, #charChildren do
+                    local item = charChildren[i]
+                    if item:IsA("Tool") then
+                        previousState.ActiveToolName = item.Name
+                        item.Parent = localPlayer:FindFirstChild("Backpack")
+                        break
+                    end
+                end
+            end
+
+            -- 3. Brinco rápido por si estabas en máquina
+            if humanoid then
+                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+
+            -- 4. Entrar al Brawl INMEDIATAMENTE
+            pcall(function()
+                replicatedStorage.rEvents.brawlEvent:FireServer("joinBrawl")
+            end)
+
+            -- 5. Si está activo Rebirths+Brawl, equipar Wild Wizards en el ring
+            if getgenv().RebirthsBrawlActive then
+                task.wait(0.6)
+                unequipAllPets()
+                equipWildWizards()
+            end
+        end
+
+    elseif action == "endBrawl" and inBrawlSession then
+        task.wait(1.5)
+        local char = localPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        
+        -- 1. Regresar a la posición exacta donde estabas antes del Brawl
+        if hrp and previousState.SavedPosition then
+            hrp.CFrame = previousState.SavedPosition
+            hrp.AssemblyLinearVelocity = Vector3.zero
+        end
+
+        task.wait(0.3)
+
+        -- 2. Volver a equipar la pesa en la mano
+        if previousState.ActiveToolName then
+            local backpack = localPlayer:FindFirstChild("Backpack")
+            local tool = backpack and backpack:FindFirstChild(previousState.ActiveToolName)
+            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+            if tool and humanoid then
+                humanoid:EquipTool(tool)
+            end
+        end
+
+        -- 3. Si Rebirths+Brawl está activo, forzar inmediatamente desequipar todo y reequipar las mascotas de repetición (bestPets)
+        if getgenv().RebirthsBrawlActive then
+            task.wait(0.2)
+            unequipAllPets()
+            task.wait(0.1)
+            equipSpecificPets(bestPets, 12)
+        end
+
+        inBrawlSession = false
+    end
+end)
+
+task.spawn(function()
+    while true do
+        if getgenv().AutoBrawlKill and inBrawlSession then
+            pcall(function()
+                local char = localPlayer.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                local targetPlayer = getBrawlTarget()
+                
+                if hrp and targetPlayer and targetPlayer.Character then
+                    local targetHrp = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    if targetHrp then
+                        hrp.CFrame = targetHrp.CFrame * CFrame.new(0, 0, 3)
+                        hrp.AssemblyLinearVelocity = Vector3.zero
+                        hrp.AssemblyAngularVelocity = Vector3.zero
+                        
+                        local backpack = localPlayer:FindFirstChild("Backpack")
+                        local punch = char:FindFirstChild("Punch") or (backpack and backpack:FindFirstChild("Punch"))
+                        local humanoid = char:FindFirstChildOfClass("Humanoid")
+                        
+                        if punch and punch.Parent == backpack and humanoid then
+                            humanoid:EquipTool(punch)
+                        end
+                        if punch and punch.Parent == char then
+                            punch:Activate()
+                        end
+                        
+                        local ev = localPlayer:FindFirstChild("muscleEvent")
+                        if ev then
+                            ev:FireServer("punch", "leftHand")
+                            ev:FireServer("punch", "rightHand")
+                        end
+                    end
+                end
+            end)
+        end
+        task.wait(0.05)
+    end
+end)
+
+-- ==========================================
+-- 5. PESTAÑA: EXTRAS & UTILIDADES
 -- ==========================================
 local extrasTab = Window:Tab({ Title = "Extras", Icon = "settings" })
-local extrasSection = extrasTab:Section({ Title = "Misc y Utilidades", Content = "Funciones adicionales" })
+local extrasSection = extrasTab:Section({ Title = "Misc y Utilidades" })
 
 extrasSection:Toggle({
     Title = "Spin Fortune Wheel",
@@ -600,18 +1125,17 @@ extrasSection:Toggle({
                 virtualUser:CaptureController()
                 virtualUser:ClickButton2(Vector2.new())
             end)
-            WindUI:Notify({ Title = "Anti AFK", Content = "Activado correctamente.", Duration = 4 })
+            WindUI:Notify({ Title = "Anti AFK Activado", Duration = 4 })
         else
             if getgenv().AntiAfkConnection then
                 getgenv().AntiAfkConnection:Disconnect()
                 getgenv().AntiAfkConnection = nil
             end
-            WindUI:Notify({ Title = "Anti AFK", Content = "Desactivado.", Duration = 4 })
+            WindUI:Notify({ Title = "Anti AFK Desactivado", Duration = 4 })
         end
     end
 })
 
--- Walk on Water
 local waterParts = {}
 task.spawn(function()
     local rounded = math.ceil(24.4140625)
@@ -645,7 +1169,6 @@ extrasSection:Toggle({
     end
 })
 
--- Limpiar inventario
 local cleaningInventory = false
 local foodItems = { "Energy Shake", "Protein Bar", "TOUGH Bar", "Protein Shake", "ULTRA Shake", "Energy Bar" }
 extrasSection:Toggle({
@@ -684,5 +1207,3 @@ extrasSection:Dropdown({
         elseif v == "Midnight" then lighting.ClockTime = 6 end
     end
 })
-
-
