@@ -308,5 +308,381 @@ speedSection:Button({
     end
 })
 
+-- ==========================================
+-- 2. PESTAÑA: REBIRTHS (Unificada: Pets + Normal)
+-- ==========================================
+local rebirthsTab = Window:Tab({ Title = "Rebirths", Icon = "repeat" })
+
+-- Sección 1: Fast Rebirth con Mascotas
+local rbSectionPets = rebirthsTab:Section({ Title = "Fast Rebirth (Con Mascotas)", Content = "Gestión con Eclipse Devourer" })
+
+local rebirthsStat = leaderstats:WaitForChild("Rebirths")
+local bestPets = { "Swift Samurai", "Omega Overlord", "Mythic Boss Pet", "Legendary Boss Pet", "Rainbow Boss Pet", "Epic Boss Pet", "Rare Boss Pet", "Common Boss Pet", "Zeus Spark", "Ares Ironfang" }
+local eclipsePets = { "Tribal Overlord", "Titanium Hydra", "Eclipse Devourer" }
+
+local rbTimeLbl = rbSectionPets:Paragraph({ Title = "Tiempo", Desc = "0d 0h 0m 0s" })
+local rbStatsLbl = rbSectionPets:Paragraph({ Title = "Renacimientos", Desc = "0 | Ganados: 0" })
+local reqStrengthLbl = rbSectionPets:Paragraph({ Title = "Fuerza Necesaria", Desc = "0" })
+
+local function getRequiredStrength()
+    return math.floor(5000 + 2500 * rebirthsStat.Value)
+end
+
+local sessionStartRebirths = rebirthsStat.Value
+local rbStartTime = tick()
+
+task.spawn(function()
+    while true do
+        local elapsed = tick() - rbStartTime
+        local days = math.floor(elapsed / 86400)
+        local hours = math.floor((elapsed % 86400) / 3600)
+        local minutes = math.floor((elapsed % 3600) / 60)
+        local seconds = math.floor(elapsed % 60)
+        
+        rbTimeLbl:SetDesc(string.format("%dd %dh %dm %ds", days, hours, minutes, seconds))
+        local g = rebirthsStat.Value - sessionStartRebirths
+        rbStatsLbl:SetDesc("Renacimientos: " .. formatNum(rebirthsStat.Value) .. " | Ganados: " .. formatNum(g))
+        reqStrengthLbl:SetDesc("Fuerza Necesaria: " .. formatNum(getRequiredStrength()))
+        task.wait(1)
+    end
+end)
+
+local function unequipAllPets()
+    local petsFolder = localPlayer:FindFirstChild("petsFolder")
+    if not petsFolder then return end
+    for _, folder in pairs(petsFolder:GetChildren()) do
+        if folder:IsA("Folder") then
+            for _, pet in pairs(folder:GetChildren()) do
+                replicatedStorage.rEvents.equipPetEvent:FireServer("unequipPet", pet)
+            end
+        end
+    end
+    task.wait(0.1)
+end
+
+local function equipSpecificPets(petList, limit)
+    local petsFolder = localPlayer:FindFirstChild("petsFolder")
+    if not petsFolder then return end
+    local count = 0
+    for _, petName in ipairs(petList) do
+        for _, folder in pairs(petsFolder:GetChildren()) do
+            if folder:IsA("Folder") then
+                for _, pet in pairs(folder:GetChildren()) do
+                    if pet.Name == petName then
+                        replicatedStorage.rEvents.equipPetEvent:FireServer("equipPet", pet)
+                        count = count + 1
+                        if count >= limit then return end
+                    end
+                end
+            end
+        end
+    end
+end
+
+getgenv().AutoFarming = false
+rbSectionPets:Toggle({
+    Title = "Fast Rebirth (Con Mascotas)",
+    Default = false,
+    Callback = function(state)
+        getgenv().AutoFarming = state
+        if state then
+            task.spawn(function()
+                unequipAllPets()
+                equipSpecificPets(bestPets, 12)
+                while getgenv().AutoFarming do
+                    local req = getRequiredStrength()
+                    while strength.Value < req and getgenv().AutoFarming do
+                        for _ = 1, 31 do
+                            localPlayer.muscleEvent:FireServer("rep")
+                        end
+                        task.wait()
+                    end
+                    if not getgenv().AutoFarming then break end
+                    unequipAllPets()
+                    equipSpecificPets(eclipsePets, 12)
+                    local currentRb = rebirthsStat.Value
+                    repeat
+                        replicatedStorage.rEvents.rebirthRemote:InvokeServer("rebirthRequest")
+                        task.wait(0.2)
+                    until rebirthsStat.Value > currentRb or not getgenv().AutoFarming
+                    if getgenv().AutoFarming then
+                        unequipAllPets()
+                        equipSpecificPets(bestPets, 12)
+                    end
+                end
+            end)
+        end
+    end
+})
+
+local selectedLift = "Industrial Lift"
+rbSectionPets:Dropdown({
+    Title = "Seleccionar Lift",
+    Values = { "Industrial Lift", "Zero Degrees Bar Lift 1", "Jungle Lift" },
+    Default = "Industrial Lift",
+    Callback = function(v) selectedLift = v end
+})
+
+rbSectionPets:Button({
+    Title = "Usar Lift Seleccionado",
+    Callback = function()
+        local hrp = (localPlayer.Character or localPlayer.CharacterAdded:Wait()):WaitForChild("HumanoidRootPart")
+        if selectedLift == "Industrial Lift" then
+            hrp.CFrame = CFrame.new(-5492.70068, 61.0028, 4643.64258)
+        elseif selectedLift == "Zero Degrees Bar Lift 1" then
+            hrp.CFrame = CFrame.new(-5374.86719, 43.5012, 10321.7617)
+        elseif selectedLift == "Jungle Lift" then
+            hrp.CFrame = CFrame.new(-8652.8672, 29.2667, 2089.2617)
+        end
+        task.wait(0.2)
+        virtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+        task.wait(0.05)
+        virtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+    end
+})
+
+local lockRunning = false
+local lockConnection = nil
+local savedCFrame = nil
+rbSectionPets:Toggle({
+    Title = "Bloquear posición 🚫",
+    Default = false,
+    Callback = function(state)
+        lockRunning = state
+        local char = localPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if state then
+            if hrp then savedCFrame = hrp.CFrame end
+            if lockConnection then lockConnection:Disconnect() end
+            lockConnection = runService.Heartbeat:Connect(function()
+                if not lockRunning then return end
+                local currentCharacter = localPlayer.Character
+                if not currentCharacter then return end
+                local currentHrp = currentCharacter:FindFirstChild("HumanoidRootPart")
+                local humanoid = currentCharacter:FindFirstChildOfClass("Humanoid")
+                if not currentHrp or not humanoid or humanoid.Health <= 0 then return end
+                if not savedCFrame then savedCFrame = currentHrp.CFrame end
+                if humanoid.WalkSpeed < 50 then humanoid.WalkSpeed = 250 end
+                if humanoid.JumpPower == 0 then humanoid.JumpPower = 50 end
+                currentHrp.AssemblyLinearVelocity = Vector3.zero
+                currentHrp.AssemblyAngularVelocity = Vector3.zero
+                currentHrp.CFrame = savedCFrame
+            end)
+        else
+            savedCFrame = nil
+            if lockConnection then
+                lockConnection:Disconnect()
+                lockConnection = nil
+            end
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum.WalkSpeed = 250
+                hum.JumpPower = 50
+            end
+        end
+    end
+})
+
+-- Sección 2: Fast Rebirth Normal (Dentro de la misma pestaña Rebirths)
+local rbSectionNormal = rebirthsTab:Section({ Title = "Fast Rebirth Normal", Content = "Sin cambio de mascotas" })
+
+local startTimeNew = tick()
+local sessionRebirthsNew = rebirthsStat.Value
+
+local timeLabelNew = rbSectionNormal:Paragraph({ Title = "Time", Desc = "0d 0h 0m 0s" })
+local gainedLabelNew = rbSectionNormal:Paragraph({ Title = "Gained Rebirths", Desc = "0" })
+local fuerzaNecesariaNew = rbSectionNormal:Paragraph({ Title = "Fuerza Necesaria", Desc = "0" })
+
+task.spawn(function()
+    while true do
+        local elapsed = tick() - startTimeNew
+        local days = math.floor(elapsed / 86400)
+        local hours = math.floor((elapsed % 86400) / 3600)
+        local minutes = math.floor((elapsed % 3600) / 60)
+        local seconds = math.floor(elapsed % 60)
+        timeLabelNew:SetDesc(string.format("%dd %dh %dm %ds", days, hours, minutes, seconds))
+
+        local gainedRebirths = rebirthsStat.Value - sessionRebirthsNew
+        gainedLabelNew:SetDesc(tostring(gainedRebirths))
+        fuerzaNecesariaNew:SetDesc(formatNum(getRequiredStrength()))
+        
+        task.wait(1)
+    end
+end)
+
+getgenv().AutoFarmingNormal = false
+rbSectionNormal:Toggle({
+    Title = "Fast Rebirth (Normal)",
+    Default = false,
+    Callback = function(autoFarmingNormal)
+        getgenv().AutoFarmingNormal = autoFarmingNormal
+        if autoFarmingNormal then
+            task.spawn(function()
+                local v26
+                while getgenv().AutoFarmingNormal do
+                    local backpack = localPlayer:FindFirstChild("Backpack")
+                    local character = localPlayer.Character
+                    if backpack then
+                        for _, tool in ipairs(backpack:GetChildren()) do
+                            if tool:IsA("Tool") and (tool.Name:find("Bar") or tool.Name:find("Weight") or tool.Name:find("Bottle") or tool.Name:find("Pushups") or tool.Name:find("Handstands")) then
+                                tool.Parent = character
+                            end
+                        end
+                    end
+
+                    local rounded19 = getRequiredStrength()
+                    while strength.Value < rounded19 and getgenv().AutoFarmingNormal do
+                        for n = 1, 31 do
+                            localPlayer.muscleEvent:FireServer("rep")
+                        end
+                        task.wait()
+                    end
+                    if not getgenv().AutoFarmingNormal then break end
+                    local value20 = rebirthsStat.Value
+                    repeat
+                        replicatedStorage.rEvents.rebirthRemote:InvokeServer("rebirthRequest")
+                        task.wait(0.2)
+                        v26 = rebirthsStat.Value > value20 or not getgenv().AutoFarmingNormal
+                    until v26
+                end
+            end)
+        end
+    end
+})
+
+
+-- ==========================================
+-- 3. PESTAÑA: EXTRAS & UTILIDADES
+-- ==========================================
+local extrasTab = Window:Tab({ Title = "Extras", Icon = "settings" })
+local extrasSection = extrasTab:Section({ Title = "Misc y Utilidades", Content = "Funciones adicionales" })
+
+extrasSection:Toggle({
+    Title = "Spin Fortune Wheel",
+    Default = false,
+    Callback = function(state)
+        _G.AutoSpinWheel = state
+        if state then
+            task.spawn(function()
+                while _G.AutoSpinWheel and task.wait(0.1) do
+                    pcall(function()
+                        replicatedStorage.rEvents.openFortuneWheelRemote:InvokeServer("openFortuneWheel", replicatedStorage.shared.catalogs.fortuneWheelChances["Fortune Wheel"])
+                    end)
+                end
+            end)
+        end
+    end
+})
+
+extrasSection:Toggle({
+    Title = "Infinite Jump",
+    Default = false,
+    Callback = function(state)
+        _G.InfiniteJump = state
+        if state then
+            userInputService.JumpRequest:Connect(function()
+                if _G.InfiniteJump and localPlayer.Character then
+                    local hum = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+                    if hum then hum:ChangeState("Jumping") end
+                end
+            end)
+        end
+    end
+})
+
+extrasSection:Toggle({
+    Title = "Anti AFK",
+    Default = false,
+    Callback = function(state)
+        if state then
+            local genv = getgenv()
+            genv.AntiAfkConnection = localPlayer.Idled:Connect(function()
+                virtualUser:CaptureController()
+                virtualUser:ClickButton2(Vector2.new())
+            end)
+            WindUI:Notify({ Title = "Anti AFK", Content = "Activado correctamente.", Duration = 4 })
+        else
+            if getgenv().AntiAfkConnection then
+                getgenv().AntiAfkConnection:Disconnect()
+                getgenv().AntiAfkConnection = nil
+            end
+            WindUI:Notify({ Title = "Anti AFK", Content = "Desactivado.", Duration = 4 })
+        end
+    end
+})
+
+-- Walk on Water
+local waterParts = {}
+task.spawn(function()
+    local rounded = math.ceil(24.4140625)
+    local basePos = Vector3.new(-2, -9.5, -2)
+    for i = 0, rounded - 1 do
+        for j = 0, rounded - 1 do
+            local function createPart(pos, name)
+                local part = Instance.new("Part")
+                part.Size = Vector3.new(2048, 1, 2048)
+                part.Position = pos
+                part.Anchored = true
+                part.Transparency = 1
+                part.CanCollide = false
+                part.Name = name
+                part.Parent = workspaceService
+                return part
+            end
+            table.insert(waterParts, createPart(basePos + Vector3.new(i * 2048, 0, j * 2048), "WaterPart_"..i.."_"..j))
+            table.insert(waterParts, createPart(basePos + Vector3.new(-i * 2048, 0, j * 2048), "WaterPart_"..i.."_"..j))
+        end
+    end
+end)
+
+extrasSection:Toggle({
+    Title = "Walk on Water",
+    Default = false,
+    Callback = function(state)
+        for _, p in ipairs(waterParts) do
+            if p and p.Parent then p.CanCollide = state end
+        end
+    end
+})
+
+-- Limpiar inventario
+local cleaningInventory = false
+local foodItems = { "Energy Shake", "Protein Bar", "TOUGH Bar", "Protein Shake", "ULTRA Shake", "Energy Bar" }
+extrasSection:Toggle({
+    Title = "Limpiar Inventario",
+    Default = false,
+    Callback = function(state)
+        cleaningInventory = state
+        if state then
+            task.spawn(function()
+                while cleaningInventory do
+                    pcall(function()
+                        local char = localPlayer.Character
+                        local backpack = localPlayer:FindFirstChild("Backpack")
+                        for _, itemName in ipairs(foodItems) do
+                            local item = (char and char:FindFirstChild(itemName)) or (backpack and backpack:FindFirstChild(itemName))
+                            if item and localPlayer:FindFirstChild("muscleEvent") then
+                                local localCamel = itemName:gsub("%s+", "")
+                                localPlayer.muscleEvent:FireServer(localCamel:sub(1,1):lower() .. localCamel:sub(2), item)
+                            end
+                        end
+                    end)
+                    task.wait(0.005)
+                end
+            end)
+        end
+    end
+})
+
+extrasSection:Dropdown({
+    Title = "Change Time",
+    Values = { "Night", "Day", "Midnight" },
+    Default = "Day",
+    Callback = function(v)
+        if v == "Night" then lighting.ClockTime = 0
+        elseif v == "Day" then lighting.ClockTime = 12
+        elseif v == "Midnight" then lighting.ClockTime = 6 end
+    end
+})
 
 
