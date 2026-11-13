@@ -551,6 +551,114 @@ rbSectionNormal:Toggle({
     end
 })
 
+-- ==========================================
+-- LÓGICA EXCLUSIVA DE AUTO BRAWL
+-- ==========================================
+local brawlTab = Window:Tab({ Title = "Brawl", Icon = "" })
+local brawlSection = brawlTab:Section({ Title = "Auto Brawl", Content = "Brawl+Rebirths" })
+
+local wildWizardPets = { "Wild Wizard", "Wild Wizards" }
+local function equipWildWizards()
+    local petsFolder = localPlayer:FindFirstChild("petsFolder")
+    if not petsFolder then return end
+    local count = 0
+    local folderList = petsFolder:GetChildren()
+    for i = 1, #folderList do
+        local folder = folderList[i]
+        if folder:IsA("Folder") then
+            local petsInFolder = folder:GetChildren()
+            for j = 1, #petsInFolder do
+                local pet = petsInFolder[j]
+                for k = 1, #wildWizardPets do
+                    if string.find(string.lower(pet.Name), string.lower(wildWizardPets[k])) then
+                        replicatedStorage.rEvents.equipPetEvent:FireServer("equipPet", pet)
+                        count = count + 1
+                        if count >= 12 then return end
+                    end
+                end
+            end
+        end
+    end
+end
+
+replicatedStorage.rEvents.brawlEvent.OnClientEvent:Connect(function(action)
+    if action == "brawlStarting" then
+        if (getgenv().AutoJoinBrawl or getgenv().RebirthsBrawlActive) and not inBrawlSession then
+            inBrawlSession = true
+
+            local char = localPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+
+            -- 1. Guarda tu posición actual antes de entrar
+            if hrp then
+                previousState.SavedPosition = hrp.CFrame
+            end
+
+            -- 2. Guarda y desequipa la pesa (Weight) a la mochila
+            previousState.ActiveToolName = nil
+            if char then
+                local charChildren = char:GetChildren()
+                for i = 1, #charChildren do
+                    local item = charChildren[i]
+                    if item:IsA("Tool") then
+                        previousState.ActiveToolName = item.Name
+                        item.Parent = localPlayer:FindFirstChild("Backpack")
+                        break
+                    end
+                end
+            end
+
+            -- 3. Salta por si estabas usando una máquina de ejercicio
+            if humanoid then
+                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
+
+            -- 4. Entra al ring de Brawl
+            pcall(function()
+                replicatedStorage.rEvents.brawlEvent:FireServer("joinBrawl")
+            end)
+
+            -- 5. SI ESTÁ ACTIVO "Rebirths+Brawl", AQUÍ EQUIPA AUTOMÁTICAMENTE EL WILD WIZARD
+            if getgenv().RebirthsBrawlActive then
+                task.wait(0.6)
+                unequipAllPets()
+                equipWildWizards()
+            end
+        end
+
+    elseif action == "endBrawl" and inBrawlSession then
+        task.wait(1.5)
+        local char = localPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        
+        -- Regresa a la posición anterior, reequipa la pesa y vuelve a las pets de repetición
+        if hrp and previousState.SavedPosition then
+            hrp.CFrame = previousState.SavedPosition
+            hrp.AssemblyLinearVelocity = Vector3.zero
+        end
+
+        task.wait(0.3)
+
+        if previousState.ActiveToolName then
+            local backpack = localPlayer:FindFirstChild("Backpack")
+            local tool = backpack and backpack:FindFirstChild(previousState.ActiveToolName)
+            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+            if tool and humanoid then
+                humanoid:EquipTool(tool)
+            end
+        end
+
+        if getgenv().RebirthsBrawlActive then
+            task.wait(0.2)
+            unequipAllPets()
+            task.wait(0.1)
+            equipSpecificPets(bestPets, 12)
+        end
+
+        inBrawlSession = false
+    end
+end)
 
 -- ==========================================
 -- 3. PESTAÑA: BOSS
