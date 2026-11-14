@@ -14,10 +14,6 @@ local morado = loadstring(game:HttpGet("https://raw.githubusercontent.com/katana
 local localPlayer2 = players.LocalPlayer 
 local displayName = localPlayer2.DisplayName or localPlayer2.Name 
 
--- Configuración general: Negro con Dorado para toda la interfaz
-local color = Color3.fromRGB(212, 175, 55) 
-local vector2 = Vector2 
-
 local addWindow = morado:AddWindow("Christian y Nyxa", { 
     main_color = color, 
     min_size = vector2.new(800, 990), 
