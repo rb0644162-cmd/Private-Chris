@@ -793,6 +793,375 @@ rbSectionNormal:Toggle({
 })
 
 -- ==========================================
+-- SECCIÓN: PESTAÑA ALIEN (Alien Automation & Shop)
+-- ==========================================
+
+local function findAlienBoss()
+    local _iB = workspace:FindFirstChild("Alien Boss")
+    if _iB and _iB:IsA("Model") then
+        local _iC = _iB:FindFirstChild("alienBossHealth", true)
+        local _iD = _iB:FindFirstChildOfClass("Humanoid")
+        if _iC and _iC:IsA("ValueBase") and _iC.Value <= 0 then
+            return nil
+        end
+        if _iD and _iD.Health <= 0 then
+            return nil
+        end
+        return _iB
+    end
+    local _iE = workspace:FindFirstChild("alienBossHealth", true)
+    if _iE and _iE:IsA("ValueBase") and _iE.Value > 0 then
+        local _iF = _iE:FindFirstAncestorOfClass("Model")
+        if _iF then
+            return _iF
+        end
+    end
+    for _iG, _iH in ipairs(workspace:GetDescendants()) do
+        if _iH:IsA("Model") then
+            local _iI = string.lower(_iH.Name)
+            if (string.find(_iI, "alien boss") or string.find(_iI, "alienboss")) and not string.find(_iI, "arena") then
+                local _iJ = _iH:FindFirstChild("alienBossHealth", true)
+                local _iK = _iH:FindFirstChildOfClass("Humanoid")
+                if _iJ and _iJ:IsA("ValueBase") and _iJ.Value <= 0 then
+                elseif _iK and _iK.Health <= 0 then
+                else
+                    return _iH
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function claimAlienChest()
+    local _iM = getCharacter()
+    local _iN = getRoot()
+    if not _iM or not _iN then
+        return
+    end
+    local _iO = workspace:FindFirstChild("Alien Chest", true)
+    if not _iO then
+        for _iP, _iQ in pairs(workspace:GetDescendants()) do
+            if (_iQ:IsA("Model") or _iQ:IsA("BasePart")) and string.find(string.lower(_iQ.Name), "chest") then
+                _iO = _iQ
+                break
+            end
+        end
+    end
+    if _iO then
+        local _iR = _iO:IsA("BasePart") and _iO or _iO:FindFirstChildWhichIsA("BasePart", true)
+        if _iR then
+            _iN.CFrame = CFrame.new(_iR.Position + Vector3.new(0, 3, 4))
+            task.wait(0.2)
+            local _iS = _iO:FindFirstChildWhichIsA("ProximityPrompt", true)
+            local _iT = _iO:FindFirstChildWhichIsA("ClickDetector", true)
+            if _iS then
+                local _iU = _iS.MaxActivationDistance
+                _iS.MaxActivationDistance = 999999
+                pcall(fireproximityprompt, _iS)
+                _iS.MaxActivationDistance = _iU
+            elseif _iT then
+                pcall(fireclickdetector, _iT)
+            else
+                pcall(function()
+                    firetouchinterest(_iR, _iN, 0)
+                    firetouchinterest(_iR, _iN, 1)
+                end)
+            end
+        end
+    end
+    task.wait(0.5)
+    for _iV, _iW in ipairs(PlayerGui:GetDescendants()) do
+        if _iW:IsA("TextButton") and _iW.Visible then
+            local _iX = string.lower(_iW.Text)
+            if string.find(_iX, "open") then
+                if getconnections then
+                    for _iY, _iZ in ipairs(getconnections(_iW.MouseButton1Click)) do
+                        if _iZ.Fire then
+                            pcall(function()
+                                _iZ:Fire()
+                            end)
+                        end
+                    end
+                else
+                    local _ja = _iW.AbsolutePosition
+                    local _jb = _iW.AbsoluteSize
+                    pcall(function()
+                        VirtualInputManager:SendMouseButtonEvent(_ja.X + _jb.X / 2, _ja.Y + _jb.Y / 2, 0, true, game, 0)
+                        VirtualInputManager:SendMouseButtonEvent(_ja.X + _jb.X / 2, _ja.Y + _jb.Y / 2, 0, false, game, 0)
+                    end)
+                end
+            end
+        end
+    end
+end
+
+local function startAlienBossFarm()
+    state.AutoFarmAlienBoss = true
+    if alienBossTask then
+        task.cancel(alienBossTask)
+    end
+    alienBossTask = task.spawn(function()
+        local _jd = false
+        while state.AutoFarmAlienBoss do
+            pcall(function()
+                local _je = findAlienBoss()
+                if _je then
+                    _jd = true
+                    if getgenv().AlienStatusLbl then
+                        updatePara(getgenv().AlienStatusLbl, "Attacking: " .. _je.Name)
+                    end
+                    local _jf = _je:FindFirstChild("BossDamageHitbox", true)
+                    if not (_jf and _jf:IsA("BasePart")) then
+                        _jf = ensureHitbox(_je)
+                    end
+                    if _jf then
+                        attackBoss(_je, _jf)
+                    end
+                else
+                    if _jd then
+                        if getgenv().AlienStatusLbl then
+                            updatePara(getgenv().AlienStatusLbl, "Boss dead! Claiming chest...")
+                        end
+                        task.wait(1)
+                        claimAlienChest()
+                        task.wait(2)
+                        _jd = false
+                    else
+                        if getgenv().AlienStatusLbl then
+                            updatePara(getgenv().AlienStatusLbl, "Waiting for boss...")
+                        end
+                    end
+                end
+            end)
+            task.wait(jitter(0.05, 0.01))
+        end
+    end)
+end
+
+local function stopAlienBossFarm()
+    state.AutoFarmAlienBoss = false
+    if alienBossTask then
+        task.cancel(alienBossTask)
+        alienBossTask = nil
+    end
+    if getgenv().AlienStatusLbl then
+        updatePara(getgenv().AlienStatusLbl, "Idle")
+    end
+end
+
+local function startAutoBuyAlienShop()
+    if alienShopTask then
+        task.cancel(alienShopTask)
+    end
+    alienShopTask = task.spawn(function()
+        while state.AutoBuyAlienShop do
+            pcall(function()
+                local _ji = RS:FindFirstChild("packages")
+                local _jj = _ji and _ji:FindFirstChild("Net")
+                local _jk = _jj and _jj:FindFirstChild("RF/AlienShop")
+                if _jk and _jk:IsA("RemoteFunction") then
+                    for _jl, _jm in pairs(selectedShopItems) do
+                        if not state.AutoBuyAlienShop then
+                            break
+                        end
+                        pcall(function()
+                            _jk:InvokeServer(_jm.Key)
+                        end)
+                        task.wait(0.5)
+                    end
+                end
+            end)
+            task.wait(1)
+        end
+    end)
+end
+
+
+-- ==========================================
+-- SECCIÓN: PESTAÑA UTILS (Auto Sell Pets & System Utilities)
+-- ==========================================
+
+local function normalizeName(_fJ)
+    return string.lower(_fJ):gsub("[%s_%-%.]", "")
+end
+
+local function findSellRemote()
+    local _fL = RS:FindFirstChild("rEvents")
+    if _fL then
+        for _fM, _fN in ipairs({"sellPetEvent", "sellPetRemote", "sellPet", "sellPetsEvent", "sellPetFunction"}) do
+            local _fO = _fL:FindFirstChild(_fN)
+            if _fO and (_fO:IsA("RemoteEvent") or _fO:IsA("RemoteFunction")) then
+                return _fO, "rEvents." .. _fN
+            end
+        end
+        for _fP, _fQ in ipairs(_fL:GetChildren()) do
+            if _fQ:IsA("RemoteEvent") or _fQ:IsA("RemoteFunction") then
+                local _fR = string.lower(_fQ.Name)
+                if string.find(_fR, "sell") and string.find(_fR, "pet") then
+                    return _fQ, "rEvents." .. _fQ.Name
+                end
+            end
+        end
+    end
+    local _fS = RS:FindFirstChild("packages")
+    local _fT = _fS and _fS:FindFirstChild("Net")
+    if _fT then
+        for _fU, _fV in ipairs(_fT:GetChildren()) do
+            if _fV:IsA("RemoteEvent") or _fV:IsA("RemoteFunction") then
+                local _fW = string.lower(_fV.Name)
+                if string.find(_fW, "sell") and string.find(_fW, "pet") then
+                    return _fV, "Net." .. _fV.Name
+                end
+            end
+        end
+    end
+    return nil, nil
+end
+
+local function sellPet(_fY, _fZ)
+    if not _fY or not _fZ or not _fZ.Parent then
+        return false
+    end
+    local _ga = pcall(function()
+        if _fY:IsA("RemoteFunction") then
+            _fY:InvokeServer("sellPet", _fZ)
+        else
+            _fY:FireServer("sellPet", _fZ)
+        end
+    end)
+    return _ga
+end
+
+local function getPetsToSell()
+    local _gc = {}
+    local _gd = LocalPlayer:FindFirstChild("petsFolder")
+    if not _gd then
+        return _gc
+    end
+    local _ge = {}
+    local _gf = {}
+    local _gg = {}
+    for _gh, _gi in ipairs(_gd:GetChildren()) do
+        if _gi:IsA("Folder") then
+            for _gj, _gk in ipairs(_gi:GetChildren()) do
+                local _gl = normalizeName(_gk.Name)
+                if _gl == "ufobot" then
+                    table.insert(_ge, _gk)
+                elseif _gl == "cosmicinvader" then
+                    table.insert(_gf, _gk)
+                elseif _gl == "alienslime" then
+                    table.insert(_gg, _gk)
+                end
+            end
+        end
+    end
+    if autoSell.TargetPets.UFOBot then
+        local _gm = #_ge
+        if autoSell.KeepOneUFOBot then
+            _gm = math.max(0, _gm - 1)
+        end
+        for _gn = 1, _gm do
+            table.insert(_gc, _ge[_gn])
+        end
+    end
+    if autoSell.TargetPets.CosmicInvader then
+        for _go, _gp in ipairs(_gf) do
+            table.insert(_gc, _gp)
+        end
+    end
+    if autoSell.TargetPets.AlienSlime then
+        for _gq, _gr in ipairs(_gg) do
+            table.insert(_gc, _gr)
+        end
+    end
+    return _gc
+end
+
+local function startAutoSell()
+    if autoSell.Enabled then
+        return
+    end
+    autoSell.Enabled = true
+    autoSell.Sold = 0
+    autoSell.LastSell = 0
+    if autoSell.Conn then
+        task.cancel(autoSell.Conn)
+    end
+    autoSell.Conn = task.spawn(function()
+        local _gt, _gu = findSellRemote()
+        if not _gt then
+            autoSell.Status = "❌ No sell remote found"
+            autoSell.Enabled = false
+            return
+        end
+        autoSell.Status = "Using " .. _gu
+        while autoSell.Enabled do
+            pcall(function()
+                local _gv = tick()
+                if _gv - autoSell.LastSell >= autoSell.SellInterval then
+                    local _gw = getPetsToSell()
+                    if #_gw > 0 then
+                        for _gx, _gy in ipairs(_gw) do
+                            if not autoSell.Enabled then
+                                break
+                            end
+                            if sellPet(_gt, _gy) then
+                                autoSell.Sold = autoSell.Sold + 1
+                            end
+                            task.wait(0.03)
+                        end
+                        autoSell.Status = "💰 Total sold: " .. autoSell.Sold
+                    else
+                        autoSell.Status = "⏳ Waiting for target pets..."
+                    end
+                    autoSell.LastSell = tick()
+                end
+            end)
+            task.wait(0.1)
+        end
+    end)
+end
+
+local function stopAutoSell()
+    autoSell.Enabled = false
+    if autoSell.Conn then
+        task.cancel(autoSell.Conn)
+        autoSell.Conn = nil
+    end
+    autoSell.Status = "Idle"
+end
+
+local function setAntiAfk(_jU)
+    if _jU then
+        if antiAfkConn then
+            return
+        end
+        antiAfkConn = LocalPlayer.Idled:Connect(function()
+            local _jV = LocalPlayer.Character
+            if _jV and _jV:FindFirstChildOfClass("Humanoid") then
+                _jV.Humanoid.Jump = true
+            end
+        end)
+    else
+        if antiAfkConn then
+            antiAfkConn:Disconnect()
+            antiAfkConn = nil
+        end
+    end
+end
+setAntiAfk(true)
+
+local function setFPSBoost(_kq)
+    state.FPSBoost = _kq
+    if _kq then
+        applyFlags(fpsBoostFlags)
+    else
+        applyFlags(defaultFlags)
+    end
+end
+
+-- ==========================================
 -- 3. PESTAÑA: BOSSES
 -- ==========================================
 local bossesTab = Window:Tab({ Title = "Bosses", Icon = "crown" })
