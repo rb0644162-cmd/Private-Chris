@@ -39,6 +39,22 @@ local userInputService = game:GetService("UserInputService")
 local virtualUser = game:GetService("VirtualUser")
 local runService = game:GetService("RunService")
 local localPlayer = players.LocalPlayer
+local playerGui = localPlayer:WaitForChild("PlayerGui")
+
+local function getCharacter()
+    return localPlayer.Character
+end
+
+local function getRoot()
+    local char = getCharacter()
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function jitter(minVal, maxVal)
+    minVal = minVal or 0.01
+    maxVal = maxVal or 0.005
+    return minVal + (math.random() * maxVal * 2 - maxVal)
+end
 
 local function formatNum(p1)
     local list = {
@@ -599,7 +615,6 @@ end
 
 getgenv().AutoFarming = false
 
--- FUNCIÓN DE FAST REBIRTH CON MASCOTAS (CON PAUSA FLUIDA PARA BRAWL)
 task.spawn(function()
     while true do
         if getgenv().AutoFarming or getgenv().RebirthsBrawlActive then
@@ -793,375 +808,6 @@ rbSectionNormal:Toggle({
 })
 
 -- ==========================================
--- SECCIÓN: PESTAÑA ALIEN (Alien Automation & Shop)
--- ==========================================
-
-local function findAlienBoss()
-    local _iB = workspace:FindFirstChild("Alien Boss")
-    if _iB and _iB:IsA("Model") then
-        local _iC = _iB:FindFirstChild("alienBossHealth", true)
-        local _iD = _iB:FindFirstChildOfClass("Humanoid")
-        if _iC and _iC:IsA("ValueBase") and _iC.Value <= 0 then
-            return nil
-        end
-        if _iD and _iD.Health <= 0 then
-            return nil
-        end
-        return _iB
-    end
-    local _iE = workspace:FindFirstChild("alienBossHealth", true)
-    if _iE and _iE:IsA("ValueBase") and _iE.Value > 0 then
-        local _iF = _iE:FindFirstAncestorOfClass("Model")
-        if _iF then
-            return _iF
-        end
-    end
-    for _iG, _iH in ipairs(workspace:GetDescendants()) do
-        if _iH:IsA("Model") then
-            local _iI = string.lower(_iH.Name)
-            if (string.find(_iI, "alien boss") or string.find(_iI, "alienboss")) and not string.find(_iI, "arena") then
-                local _iJ = _iH:FindFirstChild("alienBossHealth", true)
-                local _iK = _iH:FindFirstChildOfClass("Humanoid")
-                if _iJ and _iJ:IsA("ValueBase") and _iJ.Value <= 0 then
-                elseif _iK and _iK.Health <= 0 then
-                else
-                    return _iH
-                end
-            end
-        end
-    end
-    return nil
-end
-
-local function claimAlienChest()
-    local _iM = getCharacter()
-    local _iN = getRoot()
-    if not _iM or not _iN then
-        return
-    end
-    local _iO = workspace:FindFirstChild("Alien Chest", true)
-    if not _iO then
-        for _iP, _iQ in pairs(workspace:GetDescendants()) do
-            if (_iQ:IsA("Model") or _iQ:IsA("BasePart")) and string.find(string.lower(_iQ.Name), "chest") then
-                _iO = _iQ
-                break
-            end
-        end
-    end
-    if _iO then
-        local _iR = _iO:IsA("BasePart") and _iO or _iO:FindFirstChildWhichIsA("BasePart", true)
-        if _iR then
-            _iN.CFrame = CFrame.new(_iR.Position + Vector3.new(0, 3, 4))
-            task.wait(0.2)
-            local _iS = _iO:FindFirstChildWhichIsA("ProximityPrompt", true)
-            local _iT = _iO:FindFirstChildWhichIsA("ClickDetector", true)
-            if _iS then
-                local _iU = _iS.MaxActivationDistance
-                _iS.MaxActivationDistance = 999999
-                pcall(fireproximityprompt, _iS)
-                _iS.MaxActivationDistance = _iU
-            elseif _iT then
-                pcall(fireclickdetector, _iT)
-            else
-                pcall(function()
-                    firetouchinterest(_iR, _iN, 0)
-                    firetouchinterest(_iR, _iN, 1)
-                end)
-            end
-        end
-    end
-    task.wait(0.5)
-    for _iV, _iW in ipairs(PlayerGui:GetDescendants()) do
-        if _iW:IsA("TextButton") and _iW.Visible then
-            local _iX = string.lower(_iW.Text)
-            if string.find(_iX, "open") then
-                if getconnections then
-                    for _iY, _iZ in ipairs(getconnections(_iW.MouseButton1Click)) do
-                        if _iZ.Fire then
-                            pcall(function()
-                                _iZ:Fire()
-                            end)
-                        end
-                    end
-                else
-                    local _ja = _iW.AbsolutePosition
-                    local _jb = _iW.AbsoluteSize
-                    pcall(function()
-                        VirtualInputManager:SendMouseButtonEvent(_ja.X + _jb.X / 2, _ja.Y + _jb.Y / 2, 0, true, game, 0)
-                        VirtualInputManager:SendMouseButtonEvent(_ja.X + _jb.X / 2, _ja.Y + _jb.Y / 2, 0, false, game, 0)
-                    end)
-                end
-            end
-        end
-    end
-end
-
-local function startAlienBossFarm()
-    state.AutoFarmAlienBoss = true
-    if alienBossTask then
-        task.cancel(alienBossTask)
-    end
-    alienBossTask = task.spawn(function()
-        local _jd = false
-        while state.AutoFarmAlienBoss do
-            pcall(function()
-                local _je = findAlienBoss()
-                if _je then
-                    _jd = true
-                    if getgenv().AlienStatusLbl then
-                        updatePara(getgenv().AlienStatusLbl, "Attacking: " .. _je.Name)
-                    end
-                    local _jf = _je:FindFirstChild("BossDamageHitbox", true)
-                    if not (_jf and _jf:IsA("BasePart")) then
-                        _jf = ensureHitbox(_je)
-                    end
-                    if _jf then
-                        attackBoss(_je, _jf)
-                    end
-                else
-                    if _jd then
-                        if getgenv().AlienStatusLbl then
-                            updatePara(getgenv().AlienStatusLbl, "Boss dead! Claiming chest...")
-                        end
-                        task.wait(1)
-                        claimAlienChest()
-                        task.wait(2)
-                        _jd = false
-                    else
-                        if getgenv().AlienStatusLbl then
-                            updatePara(getgenv().AlienStatusLbl, "Waiting for boss...")
-                        end
-                    end
-                end
-            end)
-            task.wait(jitter(0.05, 0.01))
-        end
-    end)
-end
-
-local function stopAlienBossFarm()
-    state.AutoFarmAlienBoss = false
-    if alienBossTask then
-        task.cancel(alienBossTask)
-        alienBossTask = nil
-    end
-    if getgenv().AlienStatusLbl then
-        updatePara(getgenv().AlienStatusLbl, "Idle")
-    end
-end
-
-local function startAutoBuyAlienShop()
-    if alienShopTask then
-        task.cancel(alienShopTask)
-    end
-    alienShopTask = task.spawn(function()
-        while state.AutoBuyAlienShop do
-            pcall(function()
-                local _ji = RS:FindFirstChild("packages")
-                local _jj = _ji and _ji:FindFirstChild("Net")
-                local _jk = _jj and _jj:FindFirstChild("RF/AlienShop")
-                if _jk and _jk:IsA("RemoteFunction") then
-                    for _jl, _jm in pairs(selectedShopItems) do
-                        if not state.AutoBuyAlienShop then
-                            break
-                        end
-                        pcall(function()
-                            _jk:InvokeServer(_jm.Key)
-                        end)
-                        task.wait(0.5)
-                    end
-                end
-            end)
-            task.wait(1)
-        end
-    end)
-end
-
-
--- ==========================================
--- SECCIÓN: PESTAÑA UTILS (Auto Sell Pets & System Utilities)
--- ==========================================
-
-local function normalizeName(_fJ)
-    return string.lower(_fJ):gsub("[%s_%-%.]", "")
-end
-
-local function findSellRemote()
-    local _fL = RS:FindFirstChild("rEvents")
-    if _fL then
-        for _fM, _fN in ipairs({"sellPetEvent", "sellPetRemote", "sellPet", "sellPetsEvent", "sellPetFunction"}) do
-            local _fO = _fL:FindFirstChild(_fN)
-            if _fO and (_fO:IsA("RemoteEvent") or _fO:IsA("RemoteFunction")) then
-                return _fO, "rEvents." .. _fN
-            end
-        end
-        for _fP, _fQ in ipairs(_fL:GetChildren()) do
-            if _fQ:IsA("RemoteEvent") or _fQ:IsA("RemoteFunction") then
-                local _fR = string.lower(_fQ.Name)
-                if string.find(_fR, "sell") and string.find(_fR, "pet") then
-                    return _fQ, "rEvents." .. _fQ.Name
-                end
-            end
-        end
-    end
-    local _fS = RS:FindFirstChild("packages")
-    local _fT = _fS and _fS:FindFirstChild("Net")
-    if _fT then
-        for _fU, _fV in ipairs(_fT:GetChildren()) do
-            if _fV:IsA("RemoteEvent") or _fV:IsA("RemoteFunction") then
-                local _fW = string.lower(_fV.Name)
-                if string.find(_fW, "sell") and string.find(_fW, "pet") then
-                    return _fV, "Net." .. _fV.Name
-                end
-            end
-        end
-    end
-    return nil, nil
-end
-
-local function sellPet(_fY, _fZ)
-    if not _fY or not _fZ or not _fZ.Parent then
-        return false
-    end
-    local _ga = pcall(function()
-        if _fY:IsA("RemoteFunction") then
-            _fY:InvokeServer("sellPet", _fZ)
-        else
-            _fY:FireServer("sellPet", _fZ)
-        end
-    end)
-    return _ga
-end
-
-local function getPetsToSell()
-    local _gc = {}
-    local _gd = LocalPlayer:FindFirstChild("petsFolder")
-    if not _gd then
-        return _gc
-    end
-    local _ge = {}
-    local _gf = {}
-    local _gg = {}
-    for _gh, _gi in ipairs(_gd:GetChildren()) do
-        if _gi:IsA("Folder") then
-            for _gj, _gk in ipairs(_gi:GetChildren()) do
-                local _gl = normalizeName(_gk.Name)
-                if _gl == "ufobot" then
-                    table.insert(_ge, _gk)
-                elseif _gl == "cosmicinvader" then
-                    table.insert(_gf, _gk)
-                elseif _gl == "alienslime" then
-                    table.insert(_gg, _gk)
-                end
-            end
-        end
-    end
-    if autoSell.TargetPets.UFOBot then
-        local _gm = #_ge
-        if autoSell.KeepOneUFOBot then
-            _gm = math.max(0, _gm - 1)
-        end
-        for _gn = 1, _gm do
-            table.insert(_gc, _ge[_gn])
-        end
-    end
-    if autoSell.TargetPets.CosmicInvader then
-        for _go, _gp in ipairs(_gf) do
-            table.insert(_gc, _gp)
-        end
-    end
-    if autoSell.TargetPets.AlienSlime then
-        for _gq, _gr in ipairs(_gg) do
-            table.insert(_gc, _gr)
-        end
-    end
-    return _gc
-end
-
-local function startAutoSell()
-    if autoSell.Enabled then
-        return
-    end
-    autoSell.Enabled = true
-    autoSell.Sold = 0
-    autoSell.LastSell = 0
-    if autoSell.Conn then
-        task.cancel(autoSell.Conn)
-    end
-    autoSell.Conn = task.spawn(function()
-        local _gt, _gu = findSellRemote()
-        if not _gt then
-            autoSell.Status = "❌ No sell remote found"
-            autoSell.Enabled = false
-            return
-        end
-        autoSell.Status = "Using " .. _gu
-        while autoSell.Enabled do
-            pcall(function()
-                local _gv = tick()
-                if _gv - autoSell.LastSell >= autoSell.SellInterval then
-                    local _gw = getPetsToSell()
-                    if #_gw > 0 then
-                        for _gx, _gy in ipairs(_gw) do
-                            if not autoSell.Enabled then
-                                break
-                            end
-                            if sellPet(_gt, _gy) then
-                                autoSell.Sold = autoSell.Sold + 1
-                            end
-                            task.wait(0.03)
-                        end
-                        autoSell.Status = "💰 Total sold: " .. autoSell.Sold
-                    else
-                        autoSell.Status = "⏳ Waiting for target pets..."
-                    end
-                    autoSell.LastSell = tick()
-                end
-            end)
-            task.wait(0.1)
-        end
-    end)
-end
-
-local function stopAutoSell()
-    autoSell.Enabled = false
-    if autoSell.Conn then
-        task.cancel(autoSell.Conn)
-        autoSell.Conn = nil
-    end
-    autoSell.Status = "Idle"
-end
-
-local function setAntiAfk(_jU)
-    if _jU then
-        if antiAfkConn then
-            return
-        end
-        antiAfkConn = LocalPlayer.Idled:Connect(function()
-            local _jV = LocalPlayer.Character
-            if _jV and _jV:FindFirstChildOfClass("Humanoid") then
-                _jV.Humanoid.Jump = true
-            end
-        end)
-    else
-        if antiAfkConn then
-            antiAfkConn:Disconnect()
-            antiAfkConn = nil
-        end
-    end
-end
-setAntiAfk(true)
-
-local function setFPSBoost(_kq)
-    state.FPSBoost = _kq
-    if _kq then
-        applyFlags(fpsBoostFlags)
-    else
-        applyFlags(defaultFlags)
-    end
-end
-
--- ==========================================
 -- 3. PESTAÑA: BOSSES
 -- ==========================================
 local bossesTab = Window:Tab({ Title = "Bosses", Icon = "crown" })
@@ -1197,7 +843,349 @@ for _, bossName in ipairs(REGULAR_BOSS_NAMES) do
 end
 
 -- ==========================================
--- 4. PESTAÑA: AUTO BRAWL (NUEVA E INTEGRADA)
+-- 4. PESTAÑA: ALIEN (Alien Automation & Shop)
+-- ==========================================
+local alienTab = Window:Tab({ Title = "Alien", Icon = "crosshair" })
+local alienSection = alienTab:Section({ Title = "Alien Automation" })
+
+local alienStatusLbl = alienSection:Paragraph({ Title = "Status", Desc = "Idle" })
+
+local alienBossTask = nil
+local alienMachineTask = nil
+local alienShopTask = nil
+
+state = state or {}
+state.AutoFarmAlienBoss = false
+state.AutoAlienMachines = false
+state.AutoBuyAlienShop = false
+
+local function findAlienBoss()
+    local _iB = workspaceService:FindFirstChild("Alien Boss")
+    if _iB and _iB:IsA("Model") then
+        local _iC = _iB:FindFirstChild("alienBossHealth", true)
+        local _iD = _iB:FindFirstChildOfClass("Humanoid")
+        if _iC and _iC:IsA("ValueBase") and _iC.Value <= 0 then
+            return nil
+        end
+        if _iD and _iD.Health <= 0 then
+            return nil
+        end
+        return _iB
+    end
+    local _iE = workspaceService:FindFirstChild("alienBossHealth", true)
+    if _iE and _iE:IsA("ValueBase") and _iE.Value > 0 then
+        local _iF = _iE:FindFirstAncestorOfClass("Model")
+        if _iF then
+            return _iF
+        end
+    end
+    for _, _iH in ipairs(workspaceService:GetDescendants()) do
+        if _iH:IsA("Model") then
+            local _iI = string.lower(_iH.Name)
+            if (string.find(_iI, "alien boss") or string.find(_iI, "alienboss")) and not string.find(_iI, "arena") then
+                local _iJ = _iH:FindFirstChild("alienBossHealth", true)
+                local _iK = _iH:FindFirstChildOfClass("Humanoid")
+                if not (_iJ and _iJ:IsA("ValueBase") and _iJ.Value <= 0) and not (_iK and _iK.Health <= 0) then
+                    return _iH
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function claimAlienChest()
+    local _iM = getCharacter()
+    local _iN = getRoot()
+    if not _iM or not _iN then return end
+    local _iO = workspaceService:FindFirstChild("Alien Chest", true)
+    if not _iO then
+        for _, _iQ in pairs(workspaceService:GetDescendants()) do
+            if (_iQ:IsA("Model") or _iQ:IsA("BasePart")) and string.find(string.lower(_iQ.Name), "chest") then
+                _iO = _iQ
+                break
+            end
+        end
+    end
+    if _iO then
+        local _iR = _iO:IsA("BasePart") and _iO or _iO:FindFirstChildWhichIsA("BasePart", true)
+        if _iR then
+            _iN.CFrame = CFrame.new(_iR.Position + Vector3.new(0, 3, 4))
+            task.wait(0.2)
+            local _iS = _iO:FindFirstChildWhichIsA("ProximityPrompt", true)
+            local _iT = _iO:FindFirstChildWhichIsA("ClickDetector", true)
+            if _iS then
+                local _iU = _iS.MaxActivationDistance
+                _iS.MaxActivationDistance = 999999
+                pcall(fireproximityprompt, _iS)
+                _iS.MaxActivationDistance = _iU
+            elseif _iT then
+                pcall(fireclickdetector, _iT)
+            else
+                pcall(function()
+                    firetouchinterest(_iR, _iN, 0)
+                    firetouchinterest(_iR, _iN, 1)
+                end)
+            end
+        end
+    end
+    task.wait(0.5)
+    for _, _iW in ipairs(playerGui:GetDescendants()) do
+        if _iW:IsA("TextButton") and _iW.Visible then
+            local _iX = string.lower(_iW.Text)
+            if string.find(_iX, "open") then
+                if getconnections then
+                    for _, _iZ in ipairs(getconnections(_iW.MouseButton1Click)) do
+                        if _iZ.Fire then pcall(function() _iZ:Fire() end) end
+                    end
+                else
+                    local _ja = _iW.AbsolutePosition
+                    local _jb = _iW.AbsoluteSize
+                    pcall(function()
+                        virtualInputManager:SendMouseButtonEvent(_ja.X + _jb.X / 2, _ja.Y + _jb.Y / 2, 0, true, game, 0)
+                        virtualInputManager:SendMouseButtonEvent(_ja.X + _jb.X / 2, _ja.Y + _jb.Y / 2, 0, false, game, 0)
+                    end)
+                end
+            end
+        end
+    end
+end
+
+local function startAlienBossFarm()
+    state.AutoFarmAlienBoss = true
+    if alienBossTask then task.cancel(alienBossTask) end
+    alienBossTask = task.spawn(function()
+        local _jd = false
+        while state.AutoFarmAlienBoss do
+            pcall(function()
+                local _je = findAlienBoss()
+                if _je then
+                    _jd = true
+                    alienStatusLbl:SetDesc("Attacking: " .. _je.Name)
+                    local _jf = _je:FindFirstChild("BossDamageHitbox", true)
+                    if not (_jf and _jf:IsA("BasePart")) then
+                        _jf = ensureBossHitbox(_je)
+                    end
+                    if _jf then
+                        local char = getCharacter()
+                        local hum = char and char:FindFirstChildOfClass("Humanoid")
+                        if hum and hum.FloorMaterial ~= Enum.Material.Air then
+                            hum.Jump = true
+                        end
+                        bossAttackOnce(_je, _jf)
+                    end
+                else
+                    if _jd then
+                        alienStatusLbl:SetDesc("Boss dead! Claiming chest...")
+                        task.wait(1)
+                        claimAlienChest()
+                        task.wait(2)
+                        _jd = false
+                    else
+                        alienStatusLbl:SetDesc("Waiting for boss...")
+                    end
+                end
+            end)
+            task.wait(jitter(0.05, 0.01))
+        end
+    end)
+end
+
+local function stopAlienBossFarm()
+    state.AutoFarmAlienBoss = false
+    if alienBossTask then
+        task.cancel(alienBossTask)
+        alienBossTask = nil
+    end
+    alienStatusLbl:SetDesc("Idle")
+end
+
+alienSection:Toggle({
+    Title = "Auto Farm Alien Boss & Chest",
+    Default = false,
+    Callback = function(v)
+        if v then startAlienBossFarm() else stopAlienBossFarm() end
+    end
+})
+
+-- Ciclo optimizado para Máquinas Alienígenas combinadas con el Jefe
+local function startAutoAlienMachines()
+    if alienMachineTask then task.cancel(alienMachineTask) end
+    alienMachineTask = task.spawn(function()
+        while state.AutoAlienMachines do
+            pcall(function()
+                -- Pausar máquinas si el jefe alienígena está activo para darle prioridad absoluta
+                local activeBoss = findAlienBoss()
+                if activeBoss and state.AutoFarmAlienBoss then
+                    task.wait(1)
+                    return
+                end
+
+                local _gB = getCharacter()
+                local _gC = getRoot()
+                local _gD = _gB and _gB:FindFirstChildOfClass("Humanoid")
+                if not _gC or not _gD then
+                    task.wait(1)
+                    return
+                end
+
+                if _gD.Sit then
+                    task.wait(1)
+                    return
+                end
+
+                local _gE = nil
+                local _gF = workspaceService:FindFirstChild("machinesFolder")
+                if _gF then
+                    for _, _gH in ipairs(_gF:GetChildren()) do
+                        local _gI = string.lower(_gH.Name)
+                        if string.find(_gI, "alien") or string.find(_gI, "plasma") then
+                            _gE = _gH
+                            break
+                        end
+                    end
+                end
+
+                if not _gE then
+                    for _, _gK in ipairs(workspaceService:GetDescendants()) do
+                        if _gK:IsA("Model") then
+                            local _gL = string.lower(_gK.Name)
+                            local _gM = string.find(_gL, "alien") or string.find(_gL, "plasma")
+                            local _gN = string.find(_gL, "bar") or string.find(_gL, "treadmill") or string.find(_gL, "dumbbell") or string.find(_gL, "pullup") or string.find(_gL, "pull%-up") or string.find(_gL, "machine") or string.find(_gL, "bench")
+                            if _gM and _gN then
+                                _gE = _gK
+                                break
+                            end
+                        end
+                    end
+                end
+
+                if _gE then
+                    local _gO = _gE:FindFirstChildWhichIsA("ProximityPrompt", true)
+                    local _gP = _gE:FindFirstChildWhichIsA("Seat", true) or _gE:FindFirstChildWhichIsA("VehicleSeat", true)
+                    local _gQ = nil
+                    if _gO then
+                        if _gO.Parent:IsA("BasePart") then
+                            _gQ = _gO.Parent
+                        elseif _gO.Parent:IsA("Attachment") then
+                            _gQ = _gO.Parent.Parent
+                        end
+                    end
+                    if not _gQ then
+                        _gQ = _gP or _gE:FindFirstChildWhichIsA("BasePart", true)
+                    end
+
+                    if _gQ and not _gD.Sit then
+                        if _gC.Anchored then _gC.Anchored = false end
+                        _gC.CFrame = CFrame.new(_gQ.Position + Vector3.new(0, 3, 0))
+                        task.wait(0.3)
+
+                        local _gR = localPlayer:FindFirstChild("Backpack")
+                        if _gR then
+                            for _, _gT in ipairs(_gR:GetChildren()) do
+                                if _gT:IsA("Tool") then
+                                    local _gU = string.lower(_gT.Name)
+                                    if string.find(_gU, "alien") or string.find(_gU, "plasma") then
+                                        pcall(function() _gD:EquipTool(_gT) end)
+                                        break
+                                    end
+                                end
+                            end
+                        end
+
+                        if _gO then
+                            local _gV = _gO.MaxActivationDistance
+                            _gO.MaxActivationDistance = 999999
+                            pcall(fireproximityprompt, _gO)
+                            task.wait(0.1)
+                            _gO.MaxActivationDistance = _gV
+                        end
+
+                        if _gP then
+                            pcall(function() _gD.Sit = true end)
+                        end
+
+                        pcall(function()
+                            virtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                            task.wait(0.1)
+                            virtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                        end)
+                    end
+                end
+            end)
+            task.wait(1.5)
+        end
+    end)
+end
+
+alienSection:Toggle({
+    Title = "Auto Alien Machines (Unoccupied)",
+    Default = false,
+    Callback = function(v)
+        state.AutoAlienMachines = v
+        if v then startAutoAlienMachines() end
+    end
+})
+
+local alienShopSection = alienTab:Section({ Title = "Alien Shop" })
+
+local alienShopItems = {
+    {Name = "Lunar Slug", Key = "LunarSlug", Price = 2400},
+    {Name = "UFO Axolotl", Key = "UFOAxolotl", Price = 4800},
+    {Name = "Alien Serum", Key = "AlienSerum", Price = 3000},
+    {Name = "Plasma Dumbbell", Key = "PlasmaDumbbell", Price = 200},
+    {Name = "Alien Bar", Key = "AlienBar", Price = 250},
+    {Name = "Alien Pull-Up Bar", Key = "AlienPullUpBar", Price = 300},
+    {Name = "Alien Treadmill", Key = "AlienTreadmill", Price = 350}
+}
+local selectedShopItems = {}
+
+for _, item in ipairs(alienShopItems) do
+    alienShopSection:Toggle({
+        Title = item.Name .. "  (" .. item.Price .. ")",
+        Default = false,
+        Callback = function(v)
+            if v then
+                selectedShopItems[item.Name] = item
+            else
+                selectedShopItems[item.Name] = nil
+            end
+        end
+    })
+end
+
+local function startAutoBuyAlienShop()
+    if alienShopTask then task.cancel(alienShopTask) end
+    alienShopTask = task.spawn(function()
+        while state.AutoBuyAlienShop do
+            pcall(function()
+                local _ji = replicatedStorage:FindFirstChild("packages")
+                local _jj = _ji and _ji:FindFirstChild("Net")
+                local _jk = _jj and _jj:FindFirstChild("RF/AlienShop")
+                if _jk and _jk:IsA("RemoteFunction") then
+                    for _, _jm in pairs(selectedShopItems) do
+                        if not state.AutoBuyAlienShop then break end
+                        pcall(function() _jk:InvokeServer(_jm.Key) end)
+                        task.wait(0.5)
+                    end
+                end
+            end)
+            task.wait(1)
+        end
+    end)
+end
+
+alienShopSection:Toggle({
+    Title = "Enable Auto Buy Alien Shop",
+    Default = false,
+    Callback = function(v)
+        state.AutoBuyAlienShop = v
+        if v then startAutoBuyAlienShop() end
+    end
+})
+
+-- ==========================================
+-- 5. PESTAÑA: AUTO BRAWL
 -- ==========================================
 local brawlTab = Window:Tab({ Title = "Auto Brawl", Icon = "swords" })
 local brawlSection = brawlTab:Section({ Title = "Configuración de Brawl" })
@@ -1272,7 +1260,6 @@ local function equipWildWizards()
     end
 end
 
--- Detección estricta de rivales dentro del ring de Brawl
 local function getBrawlTarget()
     if not inBrawlSession then return nil end
 
@@ -1334,12 +1321,10 @@ replicatedStorage.rEvents.brawlEvent.OnClientEvent:Connect(function(action)
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             local humanoid = char and char:FindFirstChildOfClass("Humanoid")
 
-            -- 1. Guardar posición actual
             if hrp then
                 previousState.SavedPosition = hrp.CFrame
             end
 
-            -- 2. Guardar y desequipar la pesa de la mano a la mochila
             previousState.ActiveToolName = nil
             if char then
                 local charChildren = char:GetChildren()
@@ -1353,17 +1338,14 @@ replicatedStorage.rEvents.brawlEvent.OnClientEvent:Connect(function(action)
                 end
             end
 
-            -- 3. Brinco rápido por si estabas en máquina
             if humanoid then
                 humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
             end
 
-            -- 4. Entrar al Brawl INMEDIATAMENTE
             pcall(function()
                 replicatedStorage.rEvents.brawlEvent:FireServer("joinBrawl")
             end)
 
-            -- 5. Si está activo Rebirths+Brawl, equipar Wild Wizards en el ring
             if getgenv().RebirthsBrawlActive then
                 task.wait(0.6)
                 unequipAllPets()
@@ -1376,7 +1358,6 @@ replicatedStorage.rEvents.brawlEvent.OnClientEvent:Connect(function(action)
         local char = localPlayer.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         
-        -- 1. Regresar a la posición exacta donde estabas antes del Brawl
         if hrp and previousState.SavedPosition then
             hrp.CFrame = previousState.SavedPosition
             hrp.AssemblyLinearVelocity = Vector3.zero
@@ -1384,7 +1365,6 @@ replicatedStorage.rEvents.brawlEvent.OnClientEvent:Connect(function(action)
 
         task.wait(0.3)
 
-        -- 2. Volver a equipar la pesa en la mano
         if previousState.ActiveToolName then
             local backpack = localPlayer:FindFirstChild("Backpack")
             local tool = backpack and backpack:FindFirstChild(previousState.ActiveToolName)
@@ -1394,7 +1374,6 @@ replicatedStorage.rEvents.brawlEvent.OnClientEvent:Connect(function(action)
             end
         end
 
-        -- 3. Si Rebirths+Brawl está activo, forzar inmediatamente desequipar todo y reequipar las mascotas de repetición (bestPets)
         if getgenv().RebirthsBrawlActive then
             task.wait(0.2)
             unequipAllPets()
@@ -1446,7 +1425,146 @@ task.spawn(function()
 end)
 
 -- ==========================================
--- 5. PESTAÑA: EXTRAS & UTILIDADES
+-- 6. PESTAÑA: UTILS (Auto Sell Pets & System Utilities)
+-- ==========================================
+local utilsTab = Window:Tab({ Title = "Utils", Icon = "settings" })
+local utilsSection = utilsTab:Section({ Title = "Auto Sell Pets" })
+
+local autoSell = {
+    Enabled = false,
+    Conn = nil,
+    SellInterval = 0.3,
+    LastSell = 0,
+    Status = "Idle",
+    Sold = 0,
+    TargetPets = { UFOBot = true, CosmicInvader = false, AlienSlime = false },
+    KeepOneUFOBot = false,
+}
+
+local autoSellStatusLbl = utilsSection:Paragraph({ Title = "Status", Desc = "Idle" })
+task.spawn(function()
+    while true do
+        autoSellStatusLbl:SetDesc(autoSell.Status)
+        task.wait(0.5)
+    end
+end)
+
+utilsSection:Toggle({
+    Title = "Sell UFO Bot",
+    Default = true,
+    Callback = function(v) autoSell.TargetPets.UFOBot = v end
+})
+
+utilsSection:Toggle({
+    Title = "Keep 1 UFO Bot (sell extras only)",
+    Default = false,
+    Callback = function(v) autoSell.KeepOneUFOBot = v end
+})
+
+utilsSection:Toggle({
+    Title = "Sell Cosmic Invader",
+    Default = false,
+    Callback = function(v) autoSell.TargetPets.CosmicInvader = v end
+})
+
+utilsSection:Toggle({
+    Title = "Sell Alien Slime",
+    Default = false,
+    Callback = function(v) autoSell.TargetPets.AlienSlime = v end
+})
+
+local function normalizeName(name)
+    return string.lower(name):gsub("[%s_%-%.]", "")
+end
+
+local function findSellRemote()
+    local rEvents = replicatedStorage:FindFirstChild("rEvents")
+    if rEvents then
+        for _, name in ipairs({"sellPetEvent", "sellPetRemote", "sellPet", "sellPetsEvent", "sellPetFunction"}) do
+            local remote = rEvents:FindFirstChild(name)
+            if remote and (remote:IsA("RemoteEvent") or remote:IsA("RemoteFunction")) then
+                return remote, "rEvents." .. name
+            end
+        end
+    end
+    return nil, nil
+end
+
+local function getPetsToSell()
+    local list = {}
+    local petsFolder = localPlayer:FindFirstChild("petsFolder")
+    if not petsFolder then return list end
+    local ge, gf, gg = {}, {}, {}
+    for _, folder in ipairs(petsFolder:GetChildren()) do
+        if folder:IsA("Folder") then
+            for _, pet in ipairs(folder:GetChildren()) do
+                local n = normalizeName(pet.Name)
+                if n == "ufobot" then table.insert(ge, pet)
+                elseif n == "cosmicinvader" then table.insert(gf, pet)
+                elseif n == "alienslime" then table.insert(gg, pet) end
+            end
+        end
+    end
+    if autoSell.TargetPets.UFOBot then
+        local gm = #ge
+        if autoSell.KeepOneUFOBot then gm = math.max(0, gm - 1) end
+        for i = 1, gm do table.insert(list, ge[i]) end
+    end
+    if autoSell.TargetPets.CosmicInvader then for _, p in ipairs(gf) do table.insert(list, p) end end
+    if autoSell.TargetPets.AlienSlime then for _, p in ipairs(gg) do table.insert(list, p) end end
+    return list
+end
+
+utilsSection:Toggle({
+    Title = "Enable Auto Sell",
+    Default = false,
+    Callback = function(state)
+        autoSell.Enabled = state
+        if state then
+            autoSell.Sold = 0
+            autoSell.LastSell = 0
+            if autoSell.Conn then task.cancel(autoSell.Conn) end
+            autoSell.Conn = task.spawn(function()
+                local remote, name = findSellRemote()
+                if not remote then
+                    autoSell.Status = "❌ No sell remote found"
+                    autoSell.Enabled = false
+                    return
+                end
+                autoSell.Status = "Using " .. name
+                while autoSell.Enabled do
+                    pcall(function()
+                        if tick() - autoSell.LastSell >= autoSell.SellInterval then
+                            local pets = getPetsToSell()
+                            if #pets > 0 then
+                                for _, pet in ipairs(pets) do
+                                    if not autoSell.Enabled then break end
+                                    pcall(function()
+                                        if remote:IsA("RemoteFunction") then remote:InvokeServer("sellPet", pet)
+                                        else remote:FireServer("sellPet", pet) end
+                                    end)
+                                    autoSell.Sold = autoSell.Sold + 1
+                                    task.wait(0.03)
+                                end
+                                autoSell.Status = "💰 Total sold: " .. autoSell.Sold
+                            else
+                                autoSell.Status = "⏳ Waiting for target pets..."
+                            end
+                            autoSell.LastSell = tick()
+                        end
+                    end)
+                    task.wait(0.1)
+                end
+            end)
+        else
+            if autoSell.Conn then task.cancel(autoSell.Conn); autoSell.Conn = nil end
+            autoSell.Status = "Idle"
+        end
+    end
+})
+
+-- ==========================================
+-- 7. PESTAÑA: EXTRAS & UTILIDADES
 -- ==========================================
 local extrasTab = Window:Tab({ Title = "Extras", Icon = "settings" })
 local extrasSection = extrasTab:Section({ Title = "Misc y Utilidades" })
