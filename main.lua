@@ -62,6 +62,9 @@ local localPlayer = players.LocalPlayer
 local PlayerGui = localPlayer:WaitForChild("PlayerGui")
 local RS = replicatedStorage
 
+-- Control global para mostrar/ocultar las barras de vida
+getgenv().ShowHealthBars = true
+
 -- Estados para Alien y Pets
 local state = {
     AutoPunch = false,
@@ -192,7 +195,7 @@ local function startAutoPunch()
 end
 
 -- Separador
--- BILLBOARD DE VIDA (HP)
+-- BILLBOARD DE VIDA (HP) - DISEÑO MEJORADO
 -- Separador
 
 task.spawn(function()
@@ -206,55 +209,80 @@ task.spawn(function()
         
         local hpBILLBOARD2 = Instance.new("BillboardGui")
         hpBILLBOARD2.Name = "HP_BILLBOARD"
-        hpBILLBOARD2.Size = UDim2.new(6, 0, 1.2, 0)
-        hpBILLBOARD2.StudsOffset = Vector3.new(0, 3.5, 0)
+        hpBILLBOARD2.Size = UDim2.new(6, 0, 1.3, 0)
+        hpBILLBOARD2.StudsOffset = Vector3.new(0, 3.8, 0)
         hpBILLBOARD2.AlwaysOnTop = true
         hpBILLBOARD2.MaxDistance = 200
         hpBILLBOARD2.Parent = instance.Head
         
+        -- Fondo principal con transparencia y bordes redondeados elegantes
         local frame = Instance.new("Frame")
-        frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-        frame.BackgroundTransparency = 0.3
+        frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+        frame.BackgroundTransparency = 0.25
         frame.Size = UDim2.new(1, 0, 1, 0)
         frame.BorderSizePixel = 0
         frame.Parent = hpBILLBOARD2
         
         local uiCorner = Instance.new("UICorner")
-        uiCorner.CornerRadius = UDim.new(0, 8)
+        uiCorner.CornerRadius = UDim.new(0, 6)
         uiCorner.Parent = frame
         
-        local frame2 = Instance.new("Frame")
-        frame2.BackgroundColor3 = Color3.fromRGB(153, 0, 0)
-        frame2.Size = UDim2.new(1, 0, 1, 0)
-        frame2.BorderSizePixel = 0
-        frame2.Parent = frame
+        -- Borde exterior sutil para darle relieve
+        local uiStroke = Instance.new("UIStroke")
+        uiStroke.Color = Color3.fromRGB(120, 0, 0)
+        uiStroke.Transparency = 0.4
+        uiStroke.Thickness = 1.5
+        uiStroke.Parent = frame
+        
+        -- Relleno de la barra de vida con degradado rojo brillante
+        local fillFrame = Instance.new("Frame")
+        fillFrame.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+        fillFrame.Size = UDim2.new(1, 0, 1, 0)
+        fillFrame.BorderSizePixel = 0
+        fillFrame.Parent = frame
+        
+        local fillCorner = Instance.new("UICorner")
+        fillCorner.CornerRadius = UDim.new(0, 6)
+        fillCorner.Parent = fillFrame
         
         local uiGradient = Instance.new("UIGradient")
         uiGradient.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, Color3.fromRGB(153, 0, 0)),
-            ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0)),
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 30, 30)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(120, 0, 0)),
         })
-        uiGradient.Parent = frame2
+        uiGradient.Parent = fillFrame
         
+        -- Texto de la salud con fuente nítida y trazo para legibilidad perfecta
         local textLabel = Instance.new("TextLabel")
         textLabel.BackgroundTransparency = 1
         textLabel.Size = UDim2.new(1, 0, 1, 0)
-        textLabel.TextColor3 = Color3.new(1, 1, 1)
+        textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
         textLabel.Font = Enum.Font.GothamBold
-        textLabel.TextSize = 18
-        textLabel.TextStrokeTransparency = 0.5
+        textLabel.TextSize = 16
+        textLabel.TextStrokeTransparency = 0.3
+        textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        textLabel.ZIndex = 2
         textLabel.Parent = frame
         
         local function updateHealth()
             if humanoid and humanoid.Parent then
                 local health = humanoid.Health
                 local maxHealth = humanoid.MaxHealth
-                frame2.Size = UDim2.new(math.clamp(health / maxHealth, 0, 1), 0, 1, 0)
+                fillFrame.Size = UDim2.new(math.clamp(health / maxHealth, 0, 1), 0, 1, 0)
                 textLabel.Text = formatNum(health) .. " / " .. formatNum(maxHealth)
             end
         end
+        
         humanoid.HealthChanged:Connect(updateHealth)
         updateHealth()
+
+        -- Hilo para aplicar el estado global de mostrar/ocultar barra de vida
+        task.spawn(function()
+            while hpBILLBOARD2 and hpBILLBOARD2.Parent do
+                hpBILLBOARD2.Enabled = getgenv().ShowHealthBars
+                task.wait(0.5)
+            end
+        end)
     end
 
     local function setupCharacter(character)
@@ -2324,6 +2352,16 @@ emotesSection:Button({
 
 local extrasTab = Window:Tab({ Title = "Extras", Icon = "settings" })
 local extrasSection = extrasTab:Section({ Title = "Misc y Utilidades" })
+
+-- TOGGLE PARA MOSTRAR / OCULTAR LAS BARRAS DE VIDA FLOTANTES
+extrasSection:Toggle({
+    Title = "Mostrar Barra de Vida",
+    Default = true,
+    Callback = function(state)
+        getgenv().ShowHealthBars = state
+        WindUI:Notify({ Title = "Barra de Vida", Content = state and "Mostrando barras de vida" or "Barras de vida ocultas", Duration = 3 })
+    end
+})
 
 extrasSection:Toggle({
     Title = "Spin Fortune Wheel",
