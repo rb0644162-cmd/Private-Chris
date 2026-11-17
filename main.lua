@@ -1312,7 +1312,7 @@ rbSectionNormal:Toggle({
 })
 
 -- Separador
--- 3. PESTAÑA: ALIEN (INTEGRADA DE CRACKED)
+-- 3. PESTAÑA: ALIEN
 -- Separador
 
 local tabAlien = Window:Tab({ Title = "Alien", Icon = "crosshair" })
@@ -1371,12 +1371,13 @@ alienShopSection:Toggle({
 })
 
 -- Separador
--- 4. PESTAÑA: PETS (INTEGRADA DE UTILS EN CRACKED)
+-- 4. PESTAÑA: PETS (AUTO SELL + AUTO CRYSTALS + COMPRAS DE PETS/AURAS)
 -- Separador
 
 local tabPets = Window:Tab({ Title = "Pets", Icon = "paw-print" })
-local petsSellSection = tabPets:Section({ Title = "Auto Sell Pets", TextXAlignment = "Left" })
 
+-- Sección 1: Auto Sell Pets
+local petsSellSection = tabPets:Section({ Title = "Auto Sell Pets", TextXAlignment = "Left" })
 local petsStatusLbl = petsSellSection:Paragraph({ Title = "Status", Desc = "Idle" })
 
 petsSellSection:Toggle({
@@ -1429,6 +1430,308 @@ task.spawn(function()
         task.wait(0.5)
     end
 end)
+
+-- Sección 2: Auto Crystals (Apertura Automática de Cristales)
+local crystalSection = tabPets:Section({ Title = "Auto Crystals" })
+
+local crystalValuesList = {
+    "Blue Crystal", "Green Crystal", "Frost Crystal", "Mythical Crystal", 
+    "Inferno Crystal", "Legends Crystal", "Muscle Elite Crystal", 
+    "Galaxy Oracle Crystal", "Jungle Crystal", "Zero Degrees Crystal", 
+    "Alien Crystal", "Industrial Crystal"
+}
+
+local selectedCrystalForOpen = ""
+
+crystalSection:Dropdown({
+    Title = "Seleccionar Cristal",
+    Values = crystalValuesList,
+    Default = "",
+    Callback = function(text)
+        selectedCrystalForOpen = text
+        print("Crystal selected for opening: " .. text)
+    end
+})
+
+crystalSection:Toggle({
+    Title = "Auto Open Crystal",
+    Default = false,
+    Callback = function(bool)
+        _G.AutoOpenCrystal = bool
+        if bool then
+            if selectedCrystalForOpen == "" then
+                print("Please select a crystal first!")
+                return
+            end
+            print("Auto open crystal started for: " .. selectedCrystalForOpen)
+            task.spawn(function()
+                while _G.AutoOpenCrystal and selectedCrystalForOpen ~= "" do
+                    pcall(function()
+                        local args = {
+                            [1] = "openCrystal",
+                            [2] = selectedCrystalForOpen
+                        }
+                        local remote = RS:FindFirstChild("rEvents") and RS.rEvents:FindFirstChild("openCrystalRemote")
+                        if remote then
+                            remote:InvokeServer(unpack(args))
+                        else
+                            local altRemote = RS:FindFirstChild("packages") and RS.packages:FindFirstChild("Net") and RS.packages.Net:FindFirstChild("RF/OpenCrystal")
+                            if altRemote then
+                                altRemote:InvokeServer(selectedCrystalForOpen)
+                            end
+                        end
+                    end)
+                    task.wait(0.3)
+                end
+            end)
+        else
+            print("Auto open crystal stopped")
+        end
+    end
+})
+
+-- Sección 3: Cristales y Compras Automáticas de Pets/Auras
+local petsSection = tabPets:Section({ Title = "Gestión de Cristales y Mascotas" })
+
+local crystalData = { 
+    ["Blue Crystal"] = { 
+        {name = "Blue Birdie", rarity = "Basic"}, 
+        {name = "Orange Hedgehog", rarity = "Basic"}, 
+        {name = "Blue Aura", rarity = "Basic"}, 
+        {name = "Red Kitty", rarity = "Basic"}, 
+        {name = "Dark Vampy", rarity = "Advanced"}, 
+        {name = "Blue Bunny", rarity = "Basic"}, 
+        {name = "Red Aura", rarity = "Basic"}, 
+        {name = "Green Aura", rarity = "Basic"}, 
+        {name = "Purple Aura", rarity = "Basic"}, 
+        {name = "Yellow Aura", rarity = "Basic"} 
+    }, 
+    ["Green Crystal"] = { 
+        {name = "Silver Dog", rarity = "Basic"}, 
+        {name = "Green Aura", rarity = "Advanced"}, 
+        {name = "Dark Golem", rarity = "Advanced"}, 
+        {name = "Green Butterfly", rarity = "Advanced"}, 
+        {name = "Crimson Falcon", rarity = "Rare"}, 
+        {name = "Red Aura", rarity = "Basic"}, 
+        {name = "Blue Aura", rarity = "Basic"}, 
+        {name = "Purple Aura", rarity = "Basic"}, 
+        {name = "Yellow Aura", rarity = "Basic"} 
+    }, 
+    ["Frost Crystal"] = { 
+        {name = "Yellow Butterfly", rarity = "Advanced"}, 
+        {name = "Purple Dragon", rarity = "Rare"}, 
+        {name = "Blue Pheonix", rarity = "Epic"}, 
+        {name = "Orange Pegasus", rarity = "Rare"}, 
+        {name = "Lightning", rarity = "Rare"}, 
+        {name = "Electro", rarity = "Advanced"} 
+    }, 
+    ["Mythical Crystal"] = { 
+        {name = "Purple Falcon", rarity = "Rare"}, 
+        {name = "Red Dragon", rarity = "Rare"}, 
+        {name = "Blue Firecaster", rarity = "Epic"}, 
+        {name = "Golden Pheonix", rarity = "Epic"}, 
+        {name = "Power Lightning", rarity = "Rare"}, 
+        {name = "Dark Lightning", rarity = "Epic"} 
+    }, 
+    ["Inferno Crystal"] = { 
+        {name = "Red Firecaster", rarity = "Epic"}, 
+        {name = "Infernal Dragon", rarity = "Unique"}, 
+        {name = "White Pegasus", rarity = "Rare"}, 
+        {name = "Golden Pheonix", rarity = "Epic"}, 
+        {name = "Inferno", rarity = "Epic"}, 
+        {name = "Dark Storm", rarity = "Unique"} 
+    }, 
+    ["Legends Crystal"] = { 
+        {name = "Ultra Birdie", rarity = "Unique"}, 
+        {name = "Magic Butterfly", rarity = "Unique"}, 
+        {name = "Green Firecaster", rarity = "Epic"}, 
+        {name = "White Pheonix", rarity = "Epic"}, 
+        {name = "Supernova", rarity = "Epic"}, 
+        {name = "Purple Nova", rarity = "Unique"} 
+    }, 
+    ["Muscle Elite Crystal"] = { 
+        {name = "Frostwave Legends Penguin", rarity = "Rare"}, 
+        {name = "Phantom Genesis Dragon", rarity = "Rare"}, 
+        {name = "Dark Legends Manticore", rarity = "Epic"}, 
+        {name = "Ultimate Supernova Pegasus", rarity = "Epic"}, 
+        {name = "Aether Spirit Bunny", rarity = "Unique"}, 
+        {name = "Cybernetic Showdown Dragon", rarity = "Unique"} 
+    }, 
+    ["Galaxy Oracle Crystal"] = { 
+        {name = "Eternal Strike Leviathan", rarity = "Rare"}, 
+        {name = "Lightning Strike Phantom", rarity = "Epic"}, 
+        {name = "Darkstar Hunter", rarity = "Unique"}, 
+        {name = "Muscle King", rarity = "Unique"}, 
+        {name = "Azure Tundra", rarity = "Epic"}, 
+        {name = "Ultra Inferno", rarity = "Rare"} 
+    }, 
+    ["Jungle Crystal"] = { 
+        {name = "Entropic Blast", rarity = "Unique"}, 
+        {name = "Muscle Sensei", rarity = "Unique"}, 
+        {name = "Grand Supernova", rarity = "Epic"}, 
+        {name = "Neon Guardian", rarity = "Unique"}, 
+        {name = "Eternal Megastrike", rarity = "Unique"}, 
+        {name = "Golden Viking", rarity = "Epic"}, 
+        {name = "Astral Electro", rarity = "Epic"}, 
+        {name = "Dark Electro", rarity = "Epic"}, 
+        {name = "Enchanted Mirage", rarity = "Epic"}, 
+        {name = "Ultra Mirage", rarity = "Unique"}, 
+        {name = "Unstable Mirage", rarity = "Unique"} 
+    },
+    ["Zero Degrees Crystal"] = {
+        {name = "Rime Fox", rarity = "Basic"},
+        {name = "Tuskfrost", rarity = "Advanced"},
+        {name = "Polaris Owl", rarity = "Rare"},
+        {name = "Glacier Lynx", rarity = "Epic"},
+        {name = "Tricefrost Hydra", rarity = "Unique"},
+        {name = "Aurora Sovereign", rarity = "Legendary"}
+    },
+    ["Alien Crystal"] = {
+        {name = "Spore Beast", rarity = "Basic"},
+        {name = "Rift Hydra", rarity = "Advanced"},
+        {name = "Phase Mantis", rarity = "Rare"},
+        {name = "Nebula Moth", rarity = "Epic"},
+        {name = "Orbit Jelly", rarity = "Unique"},
+        {name = "Eclipse Wyrm", rarity = "Legendary"}
+    },
+    ["Industrial Crystal"] = {
+        {name = "Core Pup", rarity = "Basic"},
+        {name = "Volt Talon", rarity = "Advanced"},
+        {name = "Reactor Beast", rarity = "Rare"},
+        {name = "Plasma Ravager", rarity = "Epic"},
+        {name = "Titan Reactor", rarity = "Unique"},
+        {name = "Apex Overlord", rarity = "Legendary"}
+    }
+} 
+
+local function findCrystalForItem(itemName) 
+    for crystalName, petsTable in pairs(crystalData) do 
+        for _, pet in ipairs(petsTable) do 
+            if pet.name == itemName then 
+                return crystalName 
+            end 
+        end 
+    end 
+    return nil 
+end 
+
+local selectedPet = "" 
+local selectedAura = "" 
+
+petsSection:Paragraph({ Title = "=== Buy pets and auras ===", Desc = "Selecciona tu mascota o aura para compra automática" })
+
+local petValuesList = {
+    "Blue Birdie (Basic)", "Orange Hedgehog (Basic)", "Red Kitty (Basic)", "Blue Bunny (Basic)", "Silver Dog (Basic)", "Rime Fox (Basic)", "Spore Beast (Basic)", "Core Pup (Basic)",
+    "Dark Vampy (Advanced)", "Dark Golem (Advanced)", "Green Butterfly (Advanced)", "Yellow Butterfly (Advanced)", "Tuskfrost (Advanced)", "Rift Hydra (Advanced)", "Volt Talon (Advanced)",
+    "Crimson Falcon (Rare)", "Purple Dragon (Rare)", "Orange Pegasus (Rare)", "Purple Falcon (Rare)", "Red Dragon (Rare)", "White Pegasus (Rare)", "Frostwave Legends Penguin (Rare)", "Phantom Genesis Dragon (Rare)", "Eternal Strike Leviathan (Rare)", "Polaris Owl (Rare)", "Phase Mantis (Rare)", "Reactor Beast (Rare)",
+    "Blue Pheonix (Epic)", "Blue Firecaster (Epic)", "Golden Pheonix (Epic)", "Red Firecaster (Epic)", "Green Firecaster (Epic)", "White Pheonix (Epic)", "Dark Legends Manticore (Epic)", "Ultimate Supernova Pegasus (Epic)", "Lightning Strike Phantom (Epic)", "Golden Viking (Epic)", "Glacier Lynx (Epic)", "Nebula Moth (Epic)", "Plasma Ravager (Epic)",
+    "Infernal Dragon (Unique)", "Ultra Birdie (Unique)", "Magic Butterfly (Unique)", "Aether Spirit Bunny (Unique)", "Cybernetic Showdown Dragon (Unique)", "Darkstar Hunter (Unique)", "Muscle Sensei (Unique)", "Neon Guardian (Unique)", "Tricefrost Hydra (Unique)", "Orbit Jelly (Unique)", "Titan Reactor (Unique)",
+    "Aurora Sovereign (Legendary)", "Eclipse Wyrm (Legendary)", "Apex Overlord (Legendary)"
+}
+
+petsSection:Dropdown({
+    Title = "Select pet",
+    Values = petValuesList,
+    Default = "",
+    Callback = function(text) 
+        selectedPet = text 
+        local crystal = findCrystalForItem(text) 
+        print("Pet selected: " .. text .. " (Found in: " .. (crystal or "Unknown") .. ")") 
+    end
+})
+
+local auraValuesList = {
+    "Blue Aura (Basic)", "Green Aura (Basic)", "Purple Aura (Basic)", "Red Aura (Basic)", "Yellow Aura (Basic)", "Ultra Inferno (Rare)", "Azure Tundra (Epic)", "Grand Supernova (Epic)", "Muscle King (Unique)", "Entropic Blast (Unique)", "Eternal Megastrike (Unique)"
+}
+
+petsSection:Dropdown({
+    Title = "Select Aura",
+    Values = auraValuesList,
+    Default = "",
+    Callback = function(text) 
+        selectedAura = text 
+        local crystal = findCrystalForItem(text) 
+        print("Aura selected: " .. text .. " (Found in: " .. (crystal or "Unknown") .. ")") 
+    end
+})
+
+petsSection:Paragraph({ Title = "=== System to buys ===", Desc = "Activadores automáticos" })
+
+petsSection:Toggle({
+    Title = "Auto Buy Pet",
+    Default = false,
+    Callback = function(bool) 
+        _G.AutoBuyPet = bool 
+        if bool then 
+            if selectedPet == "" then 
+                print("Please select a pet first!") 
+                return 
+            end 
+            local petName = selectedPet:match("^(.-)%s*%(") 
+            if not petName then 
+                petName = selectedPet 
+            end 
+            local crystal = findCrystalForItem(petName) 
+            if not crystal then 
+                print("Could not find crystal for pet: " .. petName) 
+                return 
+            end 
+            print("Auto buy pet started for: " .. petName .. " from " .. crystal) 
+            task.spawn(function() 
+                while _G.AutoBuyPet and selectedPet ~= "" do 
+                    local petToBuy = ReplicatedStorage.cPetShopFolder:FindFirstChild(petName) 
+                    if petToBuy then 
+                        ReplicatedStorage.cPetShopRemote:InvokeServer(petToBuy) 
+                        print("Bought pet: " .. petName) 
+                    else 
+                        print("Pet not found: " .. petName) 
+                    end 
+                    task.wait(0.1) 
+                end 
+            end) 
+        else 
+            print("Auto buy pet stopped") 
+        end 
+    end
+})
+
+petsSection:Toggle({
+    Title = "Auto buy Aura",
+    Default = false,
+    Callback = function(bool) 
+        _G.AutoBuyAura = bool 
+        if bool then 
+            if selectedAura == "" then 
+                print("Please select an aura first!") 
+                return 
+            end 
+            local auraName = selectedAura:match("^(.-)%s*%(") 
+            if not auraName then 
+                auraName = selectedAura 
+            end 
+            local crystal = findCrystalForItem(auraName) 
+            if not crystal then 
+                print("Could not find crystal for aura: " .. auraName) 
+                return 
+            end 
+            print("Auto buy aura started for: " .. auraName .. " from " .. crystal) 
+            task.spawn(function() 
+                while _G.AutoBuyAura and selectedAura ~= "" do 
+                    local auraToBuy = ReplicatedStorage.cPetShopFolder:FindFirstChild(auraName) 
+                    if auraToBuy then 
+                        ReplicatedStorage.cPetShopRemote:InvokeServer(auraToBuy) 
+                        print("Bought aura: " .. auraName) 
+                    else 
+                        print("Aura not found: " .. auraName) 
+                    end 
+                    task.wait(0.1) 
+                end 
+            end) 
+        else 
+            print("Auto buy aura stopped") 
+        end 
+    end
+})
 
 -- Separador
 -- 5. PESTAÑA: BOSSES
@@ -1708,7 +2011,315 @@ task.spawn(function()
 end)
 
 -- Separador
--- 7. PESTAÑA: EXTRAS & UTILIDADES
+-- 7. PESTAÑA: KILLS
+-- Separador
+
+local killsTab = Window:Tab({ Title = "Kills", Icon = "skull" })
+local killsSection = killsTab:Section({ Title = "Automatización de Kills y PvP" })
+
+local map = {}
+local list10 = {}
+local v42 = false
+local v43 = false
+local v44 = false
+local name2
+local name3
+local map2 = {}
+local v45 = {}
+
+local v48 = false
+killsSection:Toggle({
+    Title = "Auto Lista Blanca Amigos",
+    Default = false,
+    Callback = function(p21)
+        v48 = p21
+        if p21 then
+            for _, value35 in ipairs(players:GetPlayers()) do
+                if value35 ~= localPlayer and localPlayer:IsFriendsWith(value35.UserId) then
+                    map[value35.Name] = true
+                end
+            end
+            players.PlayerAdded:Connect(function(player3)
+                if v48 and player3 ~= localPlayer and localPlayer:IsFriendsWith(player3.UserId) then
+                    map[player3.Name] = true
+                end
+            end)
+        else
+            for key in pairs(map) do
+                local findFirstChild3 = players:FindFirstChild(key)
+                if findFirstChild3 and localPlayer:IsFriendsWith(findFirstChild3.UserId) then
+                    map[key] = nil
+                end
+            end
+        end
+    end
+})
+
+killsSection:Input({
+    Title = "Whitelist",
+    Value = "",
+    Callback = function(p22)
+        local findFirstChild4 = players:FindFirstChild(p22)
+        if findFirstChild4 then
+            map[findFirstChild4.Name] = true
+        end
+    end
+})
+
+killsSection:Input({
+    Title = "UnWhitelist",
+    Value = "",
+    Callback = function(p23)
+        local findFirstChild5 = players:FindFirstChild(p23)
+        if findFirstChild5 then
+            map[findFirstChild5.Name] = nil
+        end
+    end
+})
+
+killsSection:Toggle({
+    Title = "Auto Kill 👹",
+    Default = false,
+    Callback = function(p24)
+        v42 = p24
+        task.spawn(function()
+            local v49 = 0
+            local instance3
+            while v42 do
+                local character11 = localPlayer.Character
+                local humanoidRootPart6 = character11 and character11:FindFirstChild("HumanoidRootPart")
+                local rightHand3 = character11 and character11:FindFirstChild("RightHand")
+                local leftHand3 = character11 and character11:FindFirstChild("LeftHand")
+                local punch = localPlayer.Backpack:FindFirstChild("Punch") or character11 and character11:FindFirstChild("Punch")
+                if punch and character11 then
+                    if punch.Parent ~= character11 then
+                        punch.Parent = character11
+                    end
+                    if punch:FindFirstChild("attackTime") then
+                        punch.attackTime.Value = 0
+                    end
+                    punch:Activate()
+                end
+                if character11 and humanoidRootPart6 and rightHand3 and leftHand3 then
+                    local character12 = instance3 and instance3.Character
+                    local humanoidRootPart7 = character12 and character12:FindFirstChild("HumanoidRootPart")
+                    local humanoid4 = character12 and character12:FindFirstChildOfClass("Humanoid")
+                    if not (instance3 and instance3.Parent and not map[instance3.Name] and humanoidRootPart7 and humanoid4 and humanoid4.Health > 0) or tick() - v49 >= 2 then
+                        instance3 = nil
+                        for _, value36 in ipairs(players:GetPlayers()) do
+                            if value36 ~= localPlayer and not map[value36.Name] then
+                                local character13 = value36.Character
+                                local humanoidRootPart8 = character13 and character13:FindFirstChild("HumanoidRootPart")
+                                local humanoid5 = character13 and character13:FindFirstChildOfClass("Humanoid")
+                                if humanoidRootPart8 and humanoid5 and humanoid5.Health > 0 then
+                                    instance3 = value36
+                                    v49 = tick()
+                                    humanoidRootPart7 = humanoidRootPart8
+                                    break
+                                end
+                            end
+                        end
+                    end
+                    if instance3 and humanoidRootPart7 then
+                        pcall(function()
+                            humanoidRootPart6.CFrame = humanoidRootPart7.CFrame * CFrame.new(0, 0, 2)
+                            firetouchinterest(rightHand3, humanoidRootPart7, 1)
+                            firetouchinterest(leftHand3, humanoidRootPart7, 1)
+                            firetouchinterest(rightHand3, humanoidRootPart7, 0)
+                            firetouchinterest(leftHand3, humanoidRootPart7, 0)
+                        end)
+                    end
+                end
+                task.wait(0.01)
+            end
+            local punch2 = localPlayer.Character and localPlayer.Character:FindFirstChild("Punch")
+            if punch2 then
+                punch2.Parent = localPlayer.Backpack
+            end
+        end)
+    end
+})
+
+local dropdownTargetNames = {}
+for _, p in ipairs(players:GetPlayers()) do
+    if p ~= localPlayer then
+        table.insert(dropdownTargetNames, p.DisplayName)
+        map2[p.Name] = p.DisplayName
+    end
+end
+
+killsSection:Dropdown({
+    Title = "Seleccionar objetivo 💀",
+    Values = dropdownTargetNames,
+    Default = "",
+    Callback = function(p25)
+        for _, value37 in ipairs(players:GetPlayers()) do
+            if value37.DisplayName == p25 then
+                if not table.find(list10, value37.Name) then
+                    table.insert(list10, value37.Name)
+                end
+                name2 = value37.Name
+                break
+            end
+        end
+    end
+})
+
+players.PlayerAdded:Connect(function(player4)
+    if player4 ~= localPlayer then
+        map2[player4.Name] = player4.DisplayName
+    end
+end)
+
+players.PlayerRemoving:Connect(function(player5)
+    if map2[player5.Name] then
+        map2[player5.Name] = nil
+    end
+    for i7 = #list10, 1, -1 do
+        if list10[i7] == player5.Name then
+            table.remove(list10, i7)
+        end
+    end
+end)
+
+killsSection:Button({
+    Title = "Remove Selected Target",
+    Callback = function()
+        if name2 then
+            for index2, value40 in ipairs(list10) do
+                if value40 == name2 then
+                    table.remove(list10, index2)
+                    break
+                end
+            end
+            name2 = nil
+        end
+    end
+})
+
+killsSection:Toggle({
+    Title = "Start Kill Target",
+    Default = false,
+    Callback = function(p26)
+        v43 = p26
+        task.spawn(function()
+            while v43 do
+                local character14 = localPlayer.Character
+                local humanoid6 = character14 and character14:FindFirstChildOfClass("Humanoid")
+                local humanoidRootPart9 = character14 and character14:FindFirstChild("HumanoidRootPart")
+                local rightHand4 = character14 and character14:FindFirstChild("RightHand")
+                local leftHand4 = character14 and character14:FindFirstChild("LeftHand")
+                
+                if character14 and humanoidRootPart9 and humanoid6 and humanoid6.Health > 0 then
+                    local punch3 = localPlayer.Backpack:FindFirstChild("Punch")
+                    if punch3 then
+                        punch3.Parent = character14
+                    end
+                    local punch4 = character14:FindFirstChild("Punch")
+                    if punch4 then
+                        if punch4:FindFirstChild("attackTime") then
+                            punch4.attackTime.Value = 0
+                        end
+                        punch4:Activate()
+                    end
+                    
+                    if rightHand4 and leftHand4 then
+                        for _, value41 in ipairs(list10) do
+                            local findFirstChild6 = players:FindFirstChild(value41)
+                            if findFirstChild6 and findFirstChild6 ~= localPlayer and findFirstChild6.Character then
+                                local character15 = findFirstChild6.Character
+                                local humanoidRootPart10 = character15:FindFirstChild("HumanoidRootPart")
+                                local humanoid7 = character15:FindFirstChildOfClass("Humanoid")
+                                
+                                if humanoidRootPart10 and humanoid7 and humanoid7.Health > 0 then
+                                    pcall(function()
+                                        humanoidRootPart9.CFrame = humanoidRootPart10.CFrame * CFrame.new(0, 0, 2)
+                                        firetouchinterest(rightHand4, humanoidRootPart10, 1)
+                                        firetouchinterest(leftHand4, humanoidRootPart10, 1)
+                                        firetouchinterest(rightHand4, humanoidRootPart10, 0)
+                                        firetouchinterest(leftHand4, humanoidRootPart10, 0)
+                                    end)
+                                end
+                            end
+                        end
+                    end
+                end
+                task.wait(0.01)
+            end
+            
+            local punch5 = localPlayer.Character and localPlayer.Character:FindFirstChild("Punch")
+            if punch5 then
+                punch5.Parent = localPlayer.Backpack
+            end
+        end)
+    end
+})
+
+local dropdownSpectateNames = {}
+for _, p in ipairs(players:GetPlayers()) do
+    if p ~= localPlayer then
+        table.insert(dropdownSpectateNames, p.DisplayName)
+        v45[p.Name] = p.DisplayName
+    end
+end
+
+killsSection:Dropdown({
+    Title = "Seleccionar Ver objetivo 👁️",
+    Values = dropdownSpectateNames,
+    Default = "",
+    Callback = function(p27)
+        for _, value42 in ipairs(players:GetPlayers()) do
+            if value42.DisplayName == p27 then
+                name3 = value42.Name
+                break
+            end
+        end
+    end
+})
+
+killsSection:Toggle({
+    Title = "Ver jugador",
+    Default = false,
+    Callback = function(p28)
+        v44 = p28
+        if not v44 then
+            workspace.CurrentCamera.CameraSubject = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid") or localPlayer
+            return
+        end
+        task.spawn(function()
+            while v44 do
+                local findFirstChild7 = players:FindFirstChild(name3)
+                if findFirstChild7 and findFirstChild7 ~= localPlayer then
+                    local humanoid8 = findFirstChild7.Character and findFirstChild7.Character:FindFirstChildOfClass("Humanoid")
+                    if humanoid8 then
+                        workspace.CurrentCamera.CameraSubject = humanoid8
+                    end
+                end
+                task.wait(0.1)
+            end
+        end)
+    end
+})
+
+-- Separador
+-- 8. PESTAÑA: EMOTES (BOTÓN ÚNICO CLICABLE)
+-- Separador
+
+local emotesTab = Window:Tab({ Title = "Emotes", Icon = "smile" })
+local emotesSection = emotesTab:Section({ Title = "Abrir Menú de Emotes" })
+
+emotesSection:Button({
+    Title = "Abrir Menú Emotes",
+    Callback = function()
+        pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/rb0644162-cmd/Private-Chris/refs/heads/main/emotes"))()
+            WindUI:Notify({ Title = "Menú de Emotes", Content = "¡Abierto correctamente!", Duration = 3 })
+        end)
+    end
+})
+
+-- Separador
+-- 9. PESTAÑA: EXTRAS & UTILIDADES
 -- Separador
 
 local extrasTab = Window:Tab({ Title = "Extras", Icon = "settings" })
@@ -1801,8 +2412,6 @@ extrasSection:Toggle({
     end
 })
 
-local cleaningInventory = false
-local foodItems = { "Energy Shake", "Protein Bar", "TOUGH Bar", "Protein Shake", "ULTRA Shake", "Energy Bar" }
 extrasSection:Toggle({
     Title = "Limpiar Inventario",
     Default = false,
