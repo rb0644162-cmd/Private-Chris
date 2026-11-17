@@ -1,12 +1,4 @@
--- ==========================================
--- SCRIPT COMPLETO - CHRISTIAN PRIV (MOBILE)
--- ==========================================
-
 local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
-
--- Separador
--- CONFIGURACIÓN DE TEMA ROJIZO Y TRANSPARENCIA
--- Separador
 
 WindUI:AddTheme({
     Name = "RedTranslucent",
@@ -37,17 +29,13 @@ Window:EditOpenButton({
     CornerRadius = UDim.new(0, 12),
     StrokeThickness = 2,
     Color = ColorSequence.new(
-        Color3.fromHex("990000"), -- Rojo
-        Color3.fromHex("1A1A1A")  -- Negro
+        Color3.fromHex("990000"),
+        Color3.fromHex("1A1A1A") 
     ),
     OnlyMobile = false,
     Enabled = true,
     Draggable = true,
 })
-
--- Separador
--- SERVICIOS Y VARIABLES GLOBALES
--- Separador
 
 local players = game:GetService("Players")
 local replicatedStorage = game:GetService("ReplicatedStorage")
@@ -62,10 +50,8 @@ local localPlayer = players.LocalPlayer
 local PlayerGui = localPlayer:WaitForChild("PlayerGui")
 local RS = replicatedStorage
 
--- Control global para mostrar/ocultar las barras de vida
 getgenv().ShowHealthBars = true
 
--- Estados para Alien y Pets
 local state = {
     AutoPunch = false,
     AutoFarmAlienBoss = false,
@@ -99,10 +85,6 @@ local punchTask = nil
 local alienBossTask = nil
 local alienMachineTask = nil
 local alienShopTask = nil
-
--- Separador
--- FUNCIONES AUXILIARES
--- Separador
 
 local function getCharacter()
     return localPlayer.Character
@@ -194,10 +176,6 @@ local function startAutoPunch()
     end)
 end
 
--- Separador
--- BILLBOARD DE VIDA (HP) - DISEÑO MEJORADO
--- Separador
-
 task.spawn(function()
     repeat task.wait() until game:IsLoaded()
     task.wait(1)
@@ -215,7 +193,6 @@ task.spawn(function()
         hpBILLBOARD2.MaxDistance = 200
         hpBILLBOARD2.Parent = instance.Head
         
-        -- Fondo principal con transparencia y bordes redondeados elegantes
         local frame = Instance.new("Frame")
         frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
         frame.BackgroundTransparency = 0.25
@@ -227,14 +204,12 @@ task.spawn(function()
         uiCorner.CornerRadius = UDim.new(0, 6)
         uiCorner.Parent = frame
         
-        -- Borde exterior sutil para darle relieve
         local uiStroke = Instance.new("UIStroke")
         uiStroke.Color = Color3.fromRGB(120, 0, 0)
         uiStroke.Transparency = 0.4
         uiStroke.Thickness = 1.5
         uiStroke.Parent = frame
         
-        -- Relleno de la barra de vida con degradado rojo brillante
         local fillFrame = Instance.new("Frame")
         fillFrame.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
         fillFrame.Size = UDim2.new(1, 0, 1, 0)
@@ -252,7 +227,6 @@ task.spawn(function()
         })
         uiGradient.Parent = fillFrame
         
-        -- Texto de la salud con fuente nítida y trazo para legibilidad perfecta
         local textLabel = Instance.new("TextLabel")
         textLabel.BackgroundTransparency = 1
         textLabel.Size = UDim2.new(1, 0, 1, 0)
@@ -276,7 +250,6 @@ task.spawn(function()
         humanoid.HealthChanged:Connect(updateHealth)
         updateHealth()
 
-        -- Hilo para aplicar el estado global de mostrar/ocultar barra de vida
         task.spawn(function()
             while hpBILLBOARD2 and hpBILLBOARD2.Parent do
                 hpBILLBOARD2.Enabled = getgenv().ShowHealthBars
@@ -298,10 +271,6 @@ task.spawn(function()
         player.CharacterAdded:Connect(setupCharacter)
     end)
 end)
-
--- Separador
--- AUTOMATIZACIÓN DE BOSSES
--- Separador
 
 local REGULAR_BOSS_NAMES = {"Boss1", "Boss2", "Boss3", "Boss4", "Boss5", "RainbowBoss"}
 local REGULAR_BOSS_FULL = {
@@ -471,10 +440,6 @@ local function stopAutoFarmBoss()
     if arena then for _, obj in ipairs(arena:GetChildren()) do if obj:IsA("Model") then local hb = obj:FindFirstChild("Hitbox"); if hb then hb:Destroy() end end end end
 end
 
--- Separador
--- FUNCIONES DE ALIEN (BOSS, MÁQUINAS Y TIENDA)
--- Separador
-
 local function findAlienBoss()
     local boss = workspace:FindFirstChild("Alien Boss")
     if boss and boss:IsA("Model") then
@@ -617,98 +582,6 @@ local function stopAlienBossFarm()
     end
 end
 
-local function startAutoAlienMachines()
-    if alienMachineTask then task.cancel(alienMachineTask) end
-    alienMachineTask = task.spawn(function()
-        while state.AutoAlienMachines do
-            pcall(function()
-                local char = getCharacter()
-                local root = getRoot()
-                local hum = char and char:FindFirstChildOfClass("Humanoid")
-                if not root or not hum then
-                    task.wait(1)
-                    return
-                end
-                local machine = nil
-                local machinesFolder = workspace:FindFirstChild("machinesFolder")
-                if machinesFolder then
-                    for _, obj in ipairs(machinesFolder:GetChildren()) do
-                        local n = string.lower(obj.Name)
-                        if string.find(n, "alien") or string.find(n, "plasma") then
-                            machine = obj
-                            break
-                        end
-                    end
-                end
-                if not machine then
-                    for _, obj in ipairs(workspace:GetDescendants()) do
-                        if obj:IsA("Model") then
-                            local n = string.lower(obj.Name)
-                            local isAlien = string.find(n, "alien") or string.find(n, "plasma")
-                            local isGym = string.find(n, "bar") or string.find(n, "treadmill") or string.find(n, "dumbbell") or string.find(n, "pullup") or string.find(n, "pull%-up") or string.find(n, "machine") or string.find(n, "bench")
-                            if isAlien and isGym then
-                                machine = obj
-                                break
-                            end
-                        end
-                    end
-                end
-                if machine then
-                    local prompt = machine:FindFirstChildWhichIsA("ProximityPrompt", true)
-                    local seat = machine:FindFirstChildWhichIsA("Seat", true) or machine:FindFirstChildWhichIsA("VehicleSeat", true)
-                    local targetPart = nil
-                    if prompt then
-                        if prompt.Parent:IsA("BasePart") then
-                            targetPart = prompt.Parent
-                        elseif prompt.Parent:IsA("Attachment") then
-                            targetPart = prompt.Parent.Parent
-                        end
-                    end
-                    if not targetPart then
-                        targetPart = seat or machine:FindFirstChildWhichIsA("BasePart", true)
-                    end
-                    if targetPart and not hum.Sit then
-                        if root.Anchored then root.Anchored = false end
-                        root.CFrame = CFrame.new(targetPart.Position + Vector3.new(0, 3, 0))
-                        task.wait(0.3)
-                        local bp = localPlayer:FindFirstChild("Backpack")
-                        if bp then
-                            for _, tool in ipairs(bp:GetChildren()) do
-                                if tool:IsA("Tool") then
-                                    local tName = string.lower(tool.Name)
-                                    if string.find(tName, "alien") or string.find(tName, "plasma") then
-                                        pcall(function() hum:EquipTool(tool) end)
-                                        break
-                                    end
-                                end
-                            end
-                        end
-                        if prompt then
-                            local origDist = prompt.MaxActivationDistance
-                            prompt.MaxActivationDistance = 999999
-                            pcall(fireproximityprompt, prompt)
-                            task.wait(0.1)
-                            prompt.MaxActivationDistance = origDist
-                        end
-                        if seat then
-                            pcall(function() hum.Sit = true end)
-                        end
-                        pcall(function()
-                            virtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                            task.wait(0.1)
-                            virtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-                        end)
-                    end
-                end
-                if not state.AutoPunch then
-                    startAutoPunch()
-                end
-            end)
-            task.wait(1)
-        end
-    end)
-end
-
 local function startAutoBuyAlienShop()
     if alienShopTask then task.cancel(alienShopTask) end
     alienShopTask = task.spawn(function()
@@ -729,10 +602,6 @@ local function startAutoBuyAlienShop()
         end
     end)
 end
-
--- Separador
--- FUNCIONES DE PETS (AUTO SELL PETS)
--- Separador
 
 local function normalizeName(str)
     return string.lower(str):gsub("[%s_%-%.]", "")
@@ -833,7 +702,7 @@ local function startAutoSell()
     autoSell.Conn = task.spawn(function()
         local remote, remoteName = findSellRemote()
         if not remote then
-            autoSell.Status = "❌ No sell remote found"
+            autoSell.Status = "No sell remote found"
             autoSell.Enabled = false
             return
         end
@@ -851,9 +720,9 @@ local function startAutoSell()
                             end
                             task.wait(0.03)
                         end
-                        autoSell.Status = "💰 Total sold: " .. autoSell.Sold
+                        autoSell.Status = "Total sold: " .. autoSell.Sold
                     else
-                        autoSell.Status = "⏳ Waiting for target pets..."
+                        autoSell.Status = "Waiting for target pets..."
                     end
                     autoSell.LastSell = tick()
                 end
@@ -872,12 +741,8 @@ local function stopAutoSell()
     autoSell.Status = "Idle"
 end
 
--- Separador
--- 1. PESTAÑA: SPEED FARM
--- Separador
-
 local speedFarmTab = Window:Tab({ Title = "Speed Farm", Icon = "zap" })
-local speedSection = speedFarmTab:Section({ Title = "Estadísticas y Control" })
+local speedSection = speedFarmTab:Section({ Title = "Farm & Funtions" })
 
 local fastRepTimeLbl = speedSection:Paragraph({ Title = "Fast Rep Time", Desc = "0d 0h 0m 0s" })
 local strengthRateLbl = speedSection:Paragraph({ Title = "Strength Rate", Desc = fmtRate(0) })
@@ -992,7 +857,7 @@ end)
 
 local autoEggActive = false
 speedSection:Toggle({
-    Title = "Auto Egg 30 Minuts",
+    Title = "Auto Egg 30Min",
     Default = false,
     Callback = function(state) autoEggActive = state end
 })
@@ -1075,14 +940,10 @@ speedSection:Button({
     end
 })
 
--- Separador
--- 2. PESTAÑA: REBIRTHS
--- Separador
-
 local rebirthsTab = Window:Tab({ Title = "Rebirths", Icon = "repeat" })
-local rbSectionPets = rebirthsTab:Section({ Title = "Fast Rebirth (Con Mascotas)" })
+local rbSectionPets = rebirthsTab:Section({ Title = "Rebirths Packs" })
 
-local bestPets = { "Swift Samurai", "Omega Overlord", "Mythic Boss Pet", "Legendary Boss Pet", "Rainbow Boss Pet", "Zeus Spark", "Ares Ironfang" }
+local bestPets = { "Swift Samurai", "Omega Overlord", "Mythic Boss Pet", "Legendary Boss Pet", "Rainbow Boss Pet", "Zeus Spark", "Epic Boss Pet"}
 local eclipsePets = { "Tribal Overlord", "Titanium Hydra", "Eclipse Devourer" }
 
 local rbTimeLbl = rbSectionPets:Paragraph({ Title = "Tiempo", Desc = "0d 0h 0m 0s" })
@@ -1149,40 +1010,34 @@ getgenv().AutoFarming = false
 
 task.spawn(function()
     while true do
-        if getgenv().AutoFarming or getgenv().RebirthsBrawlActive then
+        if getgenv().AutoFarming then
             pcall(function()
                 unequipAllPets()
                 equipSpecificPets(bestPets, 12)
                 
-                while (getgenv().AutoFarming or getgenv().RebirthsBrawlActive) do
-                    if inBrawlSession then
-                        task.wait(0.5)
-                    else
-                        local req = getRequiredStrength()
-                        while getStats().Str < req and (getgenv().AutoFarming or getgenv().RebirthsBrawlActive) and not inBrawlSession do
-                            if localPlayer:FindFirstChild("muscleEvent") then
-                                for _ = 1, 31 do
-                                    localPlayer.muscleEvent:FireServer("rep")
-                                end
-                            end
-                            task.wait()
-                        end
-                        
-                        if not (getgenv().AutoFarming or getgenv().RebirthsBrawlActive) then break end
-                        if not inBrawlSession then
-                            unequipAllPets()
-                            equipSpecificPets(eclipsePets, 12)
-                            local currentRb = getStats().Reb
-                            repeat
-                                replicatedStorage.rEvents.rebirthRemote:InvokeServer("rebirthRequest")
-                                task.wait(0.2)
-                            until getStats().Reb > currentRb or not (getgenv().AutoFarming or getgenv().RebirthsBrawlActive) or inBrawlSession
-                            
-                            if (getgenv().AutoFarming or getgenv().RebirthsBrawlActive) and not inBrawlSession then
-                                unequipAllPets()
-                                equipSpecificPets(bestPets, 12)
+                while getgenv().AutoFarming do
+                    local req = getRequiredStrength()
+                    while getStats().Str < req and getgenv().AutoFarming do
+                        if localPlayer:FindFirstChild("muscleEvent") then
+                            for _ = 1, 31 do
+                                localPlayer.muscleEvent:FireServer("rep")
                             end
                         end
+                        task.wait()
+                    end
+                    
+                    if not getgenv().AutoFarming then break end
+                    unequipAllPets()
+                    equipSpecificPets(eclipsePets, 12)
+                    local currentRb = getStats().Reb
+                    repeat
+                        replicatedStorage.rEvents.rebirthRemote:InvokeServer("rebirthRequest")
+                        task.wait(0.2)
+                    until getStats().Reb > currentRb or not getgenv().AutoFarming
+                    
+                    if getgenv().AutoFarming then
+                        unequipAllPets()
+                        equipSpecificPets(bestPets, 12)
                     end
                 end
             end)
@@ -1192,7 +1047,7 @@ task.spawn(function()
 end)
 
 rbSectionPets:Toggle({
-    Title = "Fast Rebirth (Con Mascotas)",
+    Title = "Rebirths Packs",
     Default = false,
     Callback = function(state)
         getgenv().AutoFarming = state
@@ -1233,7 +1088,7 @@ local lockRunning = false
 local lockConnection = nil
 local savedCFrame = nil
 rbSectionPets:Toggle({
-    Title = "Bloquear posición 🚫",
+    Title = "Bloquear posición",
     Default = false,
     Callback = function(state)
         lockRunning = state
@@ -1271,7 +1126,7 @@ rbSectionPets:Toggle({
     end
 })
 
-local rbSectionNormal = rebirthsTab:Section({ Title = "Fast Rebirth Normal" })
+local rbSectionNormal = rebirthsTab:Section({ Title = "Rebirth Normal" })
 
 local timeLabelNew = rbSectionNormal:Paragraph({ Title = "Time", Desc = "0d 0h 0m 0s" })
 local gainedLabelNew = rbSectionNormal:Paragraph({ Title = "Gained Rebirths", Desc = "0" })
@@ -1299,7 +1154,7 @@ end)
 
 getgenv().AutoFarmingNormal = false
 rbSectionNormal:Toggle({
-    Title = "Fast Rebirth (Normal)",
+    Title = "Rebirth Normal",
     Default = false,
     Callback = function(autoFarmingNormal)
         getgenv().AutoFarmingNormal = autoFarmingNormal
@@ -1339,34 +1194,19 @@ rbSectionNormal:Toggle({
     end
 })
 
--- Separador
--- 3. PESTAÑA: ALIEN
--- Separador
-
 local tabAlien = Window:Tab({ Title = "Alien", Icon = "crosshair" })
 local alienAutoSection = tabAlien:Section({ Title = "Alien Automation", TextXAlignment = "Left" })
 
 getgenv().AlienStatusLbl = alienAutoSection:Paragraph({ Title = "Status", Desc = "Idle" })
 
 alienAutoSection:Toggle({
-    Title = "Auto Farm Alien Boss & Chest",
+    Title = "Farm Alien Boss",
     Default = false,
     Callback = function(val)
         if val then
             startAlienBossFarm()
         else
             stopAlienBossFarm()
-        end
-    end
-})
-
-alienAutoSection:Toggle({
-    Title = "Auto Alien Machines (Unoccupied)",
-    Default = false,
-    Callback = function(val)
-        state.AutoAlienMachines = val
-        if val then
-            startAutoAlienMachines()
         end
     end
 })
@@ -1398,13 +1238,8 @@ alienShopSection:Toggle({
     end
 })
 
--- Separador
--- 4. PESTAÑA: PETS (AUTO SELL + AUTO CRYSTALS + COMPRAS DE PETS/AURAS)
--- Separador
-
 local tabPets = Window:Tab({ Title = "Pets", Icon = "paw-print" })
 
--- Sección 1: Auto Sell Pets
 local petsSellSection = tabPets:Section({ Title = "Auto Sell Pets", TextXAlignment = "Left" })
 local petsStatusLbl = petsSellSection:Paragraph({ Title = "Status", Desc = "Idle" })
 
@@ -1417,7 +1252,7 @@ petsSellSection:Toggle({
 })
 
 petsSellSection:Toggle({
-    Title = "Keep 1 UFO Bot (sell extras only)",
+    Title = "Sell UFO Bot",
     Default = false,
     Callback = function(val)
         autoSell.KeepOneUFOBot = val
@@ -1459,7 +1294,6 @@ task.spawn(function()
     end
 end)
 
--- Sección 2: Auto Crystals (Apertura Automática de Cristales)
 local crystalSection = tabPets:Section({ Title = "Auto Crystals" })
 
 local crystalValuesList = {
@@ -1518,8 +1352,7 @@ crystalSection:Toggle({
     end
 })
 
--- Sección 3: Cristales y Compras Automáticas de Pets/Auras
-local petsSection = tabPets:Section({ Title = "Gestión de Cristales y Mascotas" })
+local petsSection = tabPets:Section({ Title = "Buy Crystals" })
 
 local crystalData = { 
     ["Blue Crystal"] = { 
@@ -1612,7 +1445,7 @@ local crystalData = {
         {name = "Polaris Owl", rarity = "Rare"},
         {name = "Glacier Lynx", rarity = "Epic"},
         {name = "Tricefrost Hydra", rarity = "Unique"},
-        {name = "Aurora Sovereign", rarity = "Legendary"}
+        {name = "Aurora Sovereign", rarity = "Unique"}
     },
     ["Alien Crystal"] = {
         {name = "Spore Beast", rarity = "Basic"},
@@ -1620,7 +1453,7 @@ local crystalData = {
         {name = "Phase Mantis", rarity = "Rare"},
         {name = "Nebula Moth", rarity = "Epic"},
         {name = "Orbit Jelly", rarity = "Unique"},
-        {name = "Eclipse Wyrm", rarity = "Legendary"}
+        {name = "Eclipse Wyrm", rarity = "Unique"}
     },
     ["Industrial Crystal"] = {
         {name = "Core Pup", rarity = "Basic"},
@@ -1628,7 +1461,7 @@ local crystalData = {
         {name = "Reactor Beast", rarity = "Rare"},
         {name = "Plasma Ravager", rarity = "Epic"},
         {name = "Titan Reactor", rarity = "Unique"},
-        {name = "Apex Overlord", rarity = "Legendary"}
+        {name = "Apex Overlord", rarity = "Unique"}
     }
 } 
 
@@ -1646,7 +1479,7 @@ end
 local selectedPet = "" 
 local selectedAura = "" 
 
-petsSection:Paragraph({ Title = "=== Buy pets and auras ===", Desc = "Selecciona tu mascota o aura para compra automática" })
+petsSection:Paragraph({ Title = "Buy pets & auras", Desc = "Selecciona tu mascota o aura para comprar" })
 
 local petValuesList = {
     "Blue Birdie (Basic)", "Orange Hedgehog (Basic)", "Red Kitty (Basic)", "Blue Bunny (Basic)", "Silver Dog (Basic)", "Rime Fox (Basic)", "Spore Beast (Basic)", "Core Pup (Basic)",
@@ -1654,7 +1487,7 @@ local petValuesList = {
     "Crimson Falcon (Rare)", "Purple Dragon (Rare)", "Orange Pegasus (Rare)", "Purple Falcon (Rare)", "Red Dragon (Rare)", "White Pegasus (Rare)", "Frostwave Legends Penguin (Rare)", "Phantom Genesis Dragon (Rare)", "Eternal Strike Leviathan (Rare)", "Polaris Owl (Rare)", "Phase Mantis (Rare)", "Reactor Beast (Rare)",
     "Blue Pheonix (Epic)", "Blue Firecaster (Epic)", "Golden Pheonix (Epic)", "Red Firecaster (Epic)", "Green Firecaster (Epic)", "White Pheonix (Epic)", "Dark Legends Manticore (Epic)", "Ultimate Supernova Pegasus (Epic)", "Lightning Strike Phantom (Epic)", "Golden Viking (Epic)", "Glacier Lynx (Epic)", "Nebula Moth (Epic)", "Plasma Ravager (Epic)",
     "Infernal Dragon (Unique)", "Ultra Birdie (Unique)", "Magic Butterfly (Unique)", "Aether Spirit Bunny (Unique)", "Cybernetic Showdown Dragon (Unique)", "Darkstar Hunter (Unique)", "Muscle Sensei (Unique)", "Neon Guardian (Unique)", "Tricefrost Hydra (Unique)", "Orbit Jelly (Unique)", "Titan Reactor (Unique)",
-    "Aurora Sovereign (Legendary)", "Eclipse Wyrm (Legendary)", "Apex Overlord (Legendary)"
+    "Aurora Sovereign (Unique)", "Eclipse Wyrm (Unique)", "Apex Overlord (Unique)"
 }
 
 petsSection:Dropdown({
@@ -1683,7 +1516,7 @@ petsSection:Dropdown({
     end
 })
 
-petsSection:Paragraph({ Title = "=== System to buys ===", Desc = "Activadores automáticos" })
+petsSection:Paragraph({ Title = "Buy Aura & Pets", Desc = "Compra automática" })
 
 petsSection:Toggle({
     Title = "Auto Buy Pet",
@@ -1761,10 +1594,6 @@ petsSection:Toggle({
     end
 })
 
--- Separador
--- 5. PESTAÑA: BOSSES
--- Separador
-
 local bossesTab = Window:Tab({ Title = "Bosses", Icon = "crown" })
 local bossSectionMain = bossesTab:Section({ Title = "Boss Automation" })
 
@@ -1797,82 +1626,31 @@ for _, bossName in ipairs(REGULAR_BOSS_NAMES) do
     })
 end
 
--- Separador
--- 6. PESTAÑA: AUTO BRAWL
--- Separador
-
 local brawlTab = Window:Tab({ Title = "Auto Brawl", Icon = "swords" })
-local brawlSection = brawlTab:Section({ Title = "Configuración de Brawl" })
+local brawlSection = brawlTab:Section({ Title = "Brawls" })
 
 getgenv().AutoJoinBrawl = false
 brawlSection:Toggle({
-    Title = "Auto Entrar a Brawl (Modo Inteligente)",
+    Title = "Auto join Brawl",
     Default = false,
     Callback = function(state)
         getgenv().AutoJoinBrawl = state
     end
 })
 
-getgenv().OnlyAutoJoinBrawl = false
 brawlSection:Toggle({
-    Title = "Solo Auto Entrar (AFK)",
-    Default = false,
-    Callback = function(state)
-        getgenv().OnlyAutoJoinBrawl = state
-    end
-})
-
-getgenv().RebirthsBrawlActive = false
-brawlSection:Toggle({
-    Title = "Rebirths+Brawl",
-    Default = false,
-    Callback = function(state)
-        getgenv().RebirthsBrawlActive = state
-    end
-})
-
-getgenv().AutoBrawlKill = false
-local targetPlayerNameInput = ""
-
-brawlSection:Input({
-    Title = "Cuenta Prioritaria (Opcional)",
-    Value = "",
-    Callback = function(v)
-        targetPlayerNameInput = v
-    end
-})
-
-brawlSection:Toggle({
-    Title = "Auto Matar en Ring (Automático)",
+    Title = "Auto Win Brawl",
     Default = false,
     Callback = function(state)
         getgenv().AutoBrawlKill = state
     end
 })
 
-local wildWizardPets = { "Wild Wizard", "Wild Wizards" }
-local function equipWildWizards()
-    local petsFolder = localPlayer:FindFirstChild("petsFolder")
-    if not petsFolder then return end
-    local count = 0
-    local folderList = petsFolder:GetChildren()
-    for i = 1, #folderList do
-        local folder = folderList[i]
-        if folder:IsA("Folder") then
-            local petsInFolder = folder:GetChildren()
-            for j = 1, #petsInFolder do
-                local pet = petsInFolder[j]
-                for k = 1, #wildWizardPets do
-                    if string.find(string.lower(pet.Name), string.lower(wildWizardPets[k])) then
-                        replicatedStorage.rEvents.equipPetEvent:FireServer("equipPet", pet)
-                        count = count + 1
-                        if count >= 12 then return end
-                    end
-                end
-            end
-        end
-    end
-end
+local inBrawlSession = false
+local previousState = {
+    SavedPosition = nil,
+    ActiveToolName = nil
+}
 
 local function getBrawlTarget()
     if not inBrawlSession then return nil end
@@ -1890,9 +1668,7 @@ local function getBrawlTarget()
     local myChar = localPlayer.Character
     local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
 
-    local playerList = players:GetPlayers()
-    for i = 1, #playerList do
-        local p = playerList[i]
+    for _, p in ipairs(players:GetPlayers()) do
         if p ~= localPlayer and p.Character then
             local hum = p.Character:FindFirstChildOfClass("Humanoid")
             local hrp = p.Character:FindFirstChild("HumanoidRootPart")
@@ -1909,26 +1685,9 @@ local function getBrawlTarget()
     return nil
 end
 
-inBrawlSession = false
-local previousState = {
-    SavedPosition = nil,
-    ActiveToolName = nil
-}
-
 replicatedStorage.rEvents.brawlEvent.OnClientEvent:Connect(function(action)
     if action == "brawlStarting" then
-        if getgenv().OnlyAutoJoinBrawl and not getgenv().AutoJoinBrawl then
-            local char = localPlayer.Character
-            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-            if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end
-            task.wait(0.05)
-            pcall(function()
-                replicatedStorage.rEvents.brawlEvent:FireServer("joinBrawl")
-            end)
-            return
-        end
-
-        if (getgenv().AutoJoinBrawl or getgenv().RebirthsBrawlActive) and not inBrawlSession then
+        if getgenv().AutoJoinBrawl and not inBrawlSession then
             inBrawlSession = true
 
             local char = localPlayer.Character
@@ -1941,9 +1700,7 @@ replicatedStorage.rEvents.brawlEvent.OnClientEvent:Connect(function(action)
 
             previousState.ActiveToolName = nil
             if char then
-                local charChildren = char:GetChildren()
-                for i = 1, #charChildren do
-                    local item = charChildren[i]
+                for _, item in ipairs(char:GetChildren()) do
                     if item:IsA("Tool") then
                         previousState.ActiveToolName = item.Name
                         item.Parent = localPlayer:FindFirstChild("Backpack")
@@ -1959,12 +1716,6 @@ replicatedStorage.rEvents.brawlEvent.OnClientEvent:Connect(function(action)
             pcall(function()
                 replicatedStorage.rEvents.brawlEvent:FireServer("joinBrawl")
             end)
-
-            if getgenv().RebirthsBrawlActive then
-                task.wait(0.6)
-                unequipAllPets()
-                equipWildWizards()
-            end
         end
 
     elseif action == "endBrawl" and inBrawlSession then
@@ -1988,13 +1739,6 @@ replicatedStorage.rEvents.brawlEvent.OnClientEvent:Connect(function(action)
             end
         end
 
-        if getgenv().RebirthsBrawlActive then
-            task.wait(0.2)
-            unequipAllPets()
-            task.wait(0.1)
-            equipSpecificPets(bestPets, 12)
-        end
-
         inBrawlSession = false
     end
 end)
@@ -2009,8 +1753,10 @@ task.spawn(function()
                 
                 if hrp and targetPlayer and targetPlayer.Character then
                     local targetHrp = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
-                    if targetHrp then
-                        hrp.CFrame = targetHrp.CFrame * CFrame.new(0, 0, 3)
+                    local targetHum = targetPlayer.Character:FindFirstChildOfClass("Humanoid")
+                    
+                    if targetHrp and targetHum and targetHum.Health > 0 then
+                        hrp.CFrame = targetHrp.CFrame * CFrame.new(0, 0, 2.5)
                         hrp.AssemblyLinearVelocity = Vector3.zero
                         hrp.AssemblyAngularVelocity = Vector3.zero
                         
@@ -2022,6 +1768,9 @@ task.spawn(function()
                             humanoid:EquipTool(punch)
                         end
                         if punch and punch.Parent == char then
+                            if punch:FindFirstChild("attackTime") then
+                                punch.attackTime.Value = 0
+                            end
                             punch:Activate()
                         end
                         
@@ -2034,16 +1783,12 @@ task.spawn(function()
                 end
             end)
         end
-        task.wait(0.05)
+        task.wait(0.02)
     end
 end)
 
--- Separador
--- 7. PESTAÑA: KILLS
--- Separador
-
 local killsTab = Window:Tab({ Title = "Kills", Icon = "skull" })
-local killsSection = killsTab:Section({ Title = "Automatización de Kills y PvP" })
+local killsSection = killsTab:Section({ Title = "Kill Contenido" })
 
 local map = {}
 local list10 = {}
@@ -2106,7 +1851,7 @@ killsSection:Input({
 })
 
 killsSection:Toggle({
-    Title = "Auto Kill 👹",
+    Title = "Auto Kill",
     Default = false,
     Callback = function(p24)
         v42 = p24
@@ -2177,7 +1922,7 @@ for _, p in ipairs(players:GetPlayers()) do
 end
 
 killsSection:Dropdown({
-    Title = "Seleccionar objetivo 💀",
+    Title = "Seleccionar objetivo",
     Values = dropdownTargetNames,
     Default = "",
     Callback = function(p25)
@@ -2292,7 +2037,7 @@ for _, p in ipairs(players:GetPlayers()) do
 end
 
 killsSection:Dropdown({
-    Title = "Seleccionar Ver objetivo 👁️",
+    Title = "Seleccionar Ver objetivo",
     Values = dropdownSpectateNames,
     Default = "",
     Callback = function(p27)
@@ -2329,15 +2074,11 @@ killsSection:Toggle({
     end
 })
 
--- Separador
--- 8. PESTAÑA: EMOTES (BOTÓN ÚNICO CLICABLE)
--- Separador
-
 local emotesTab = Window:Tab({ Title = "Emotes", Icon = "smile" })
-local emotesSection = emotesTab:Section({ Title = "Abrir Menú de Emotes" })
+local emotesSection = emotesTab:Section({ Title = "Emotes" })
 
 emotesSection:Button({
-    Title = "Abrir Menú Emotes",
+    Title = "Menú Emotes",
     Callback = function()
         pcall(function()
             loadstring(game:HttpGet("https://raw.githubusercontent.com/rb0644162-cmd/Private-Chris/refs/heads/main/emotes"))()
@@ -2346,14 +2087,9 @@ emotesSection:Button({
     end
 })
 
--- Separador
--- 9. PESTAÑA: EXTRAS & UTILIDADES
--- Separador
-
 local extrasTab = Window:Tab({ Title = "Extras", Icon = "settings" })
 local extrasSection = extrasTab:Section({ Title = "Misc y Utilidades" })
 
--- TOGGLE PARA MOSTRAR / OCULTAR LAS BARRAS DE VIDA FLOTANTES
 extrasSection:Toggle({
     Title = "Mostrar Barra de Vida",
     Default = true,
