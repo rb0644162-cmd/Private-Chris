@@ -1626,20 +1626,35 @@ for _, bossName in ipairs(REGULAR_BOSS_NAMES) do
     })
 end
 
-local brawlTab = Window:Tab({ Title = "Auto Brawl", Icon = "swords" })
-local brawlSection = brawlTab:Section({ Title = "Brawls" })
+-- ==========================================
+-- PESTAÑA: BRAWL (AISLADA)
+-- ==========================================
+
+local brawlTab = Window:Tab({ Title = "Brawl", Icon = "swords" })
+local brawlSection = brawlTab:Section({ Title = "Controles de Brawl" })
 
 getgenv().AutoJoinBrawl = false
 brawlSection:Toggle({
-    Title = "Auto join Brawl",
+    Title = "Join Brawl",
     Default = false,
     Callback = function(state)
         getgenv().AutoJoinBrawl = state
     end
 })
 
+getgenv().AutoBrawlKill = false
+local targetPlayerNameInput = ""
+
+brawlSection:Input({
+    Title = "Cuenta Prioritaria (Opcional)",
+    Value = "",
+    Callback = function(v)
+        targetPlayerNameInput = v
+    end
+})
+
 brawlSection:Toggle({
-    Title = "Auto Win Brawl",
+    Title = "Win Brawl",
     Default = false,
     Callback = function(state)
         getgenv().AutoBrawlKill = state
