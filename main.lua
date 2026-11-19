@@ -119,6 +119,7 @@ local function updatePara(paraObj, text)
 end
 
 local function formatNum(p1)
+    local n = tonumber(p1) or 0
     local list = {
         { "Qi", 1e18 },
         { "Qa", 1e15 },
@@ -128,11 +129,11 @@ local function formatNum(p1)
         { "K", 1e3 },
     }
     for _, value in ipairs(list) do
-        if p1 >= value[2] then
-            return string.format("%.2f%s", p1 / value[2], value[1])
+        if math.abs(n) >= value[2] then
+            return string.format("%.2f%s", n / value[2], value[1])
         end
     end
-    return tostring(math.floor(p1))
+    return tostring(math.floor(n))
 end
 
 local function fmtRate(r)
@@ -143,16 +144,23 @@ local function fmtRate(r)
         "\nPer week: " .. formatNum(r * 604800)
 end
 
+local function getDurabilityValue()
+    local ls = localPlayer:FindFirstChild("leaderstats")
+    local durObj = (ls and ls:FindFirstChild("Durability")) or localPlayer:FindFirstChild("Durability")
+    if durObj and tonumber(durObj.Value) ~= nil then
+        return tonumber(durObj.Value) or 0
+    end
+    return 0
+end
+
 local function getStats()
     local ls = localPlayer:FindFirstChild("leaderstats")
-    if not ls then return { Str = 0, Dur = 0, Reb = 0 } end
-    local s = ls:FindFirstChild("Strength")
-    local d = ls:FindFirstChild("Durability")
-    local r = ls:FindFirstChild("Rebirths")
+    local s = ls and ls:FindFirstChild("Strength")
+    local r = ls and ls:FindFirstChild("Rebirths")
     return {
-        Str = s and s.Value or 0,
-        Dur = d and d.Value or 0,
-        Reb = r and r.Value or 0,
+        Str = (s and tonumber(s.Value)) or 0,
+        Dur = getDurabilityValue(),
+        Reb = (r and tonumber(r.Value)) or 0,
     }
 end
 
@@ -744,12 +752,10 @@ end
 local speedFarmTab = Window:Tab({ Title = "Speed Farm", Icon = "zap" })
 local speedSection = speedFarmTab:Section({ Title = "Farm & Funtions" })
 
-local fastRepTimeLbl = speedSection:Paragraph({ Title = "Fast Rep Time", Desc = "0d 0h 0m 0s" })
-local strengthRateLbl = speedSection:Paragraph({ Title = "Strength Rate", Desc = fmtRate(0) })
-local durabilityRateLbl = speedSection:Paragraph({ Title = "Durability Rate", Desc = fmtRate(0) })
-
-local strengthStatsLbl = speedSection:Paragraph({ Title = "Strength", Desc = "0 | Gained: 0" })
-local durabilityStatsLbl = speedSection:Paragraph({ Title = "Durability", Desc = "0 | Gained: 0" })
+local farmStatsLbl = speedSection:Paragraph({
+    Title = "Farm Stats",
+    Desc = "Fast Rep Time: 0d 0h 0m 0s\n\nStrength: 0 | Gained: 0\n" .. fmtRate(0) .. "\n\nDurability: 0 | Gained: 0\n" .. fmtRate(0)
+})
 
 local repSpeedVal = 55
 speedSection:Input({
@@ -815,7 +821,6 @@ task.spawn(function()
 end)
 
 task.spawn(function()
-    task.wait(2)
     local initialStats = getStats()
     local initialStrength = initialStats.Str
     local initialDurability = initialStats.Dur
@@ -824,6 +829,8 @@ task.spawn(function()
     local lastSampleTime = tick()
     local lastSampleStr = initialStrength
     local lastSampleDur = initialDurability
+    local strPerSec = 0
+    local durPerSec = 0
 
     while true do
         local currentTime = tick()
@@ -837,20 +844,22 @@ task.spawn(function()
         local minutes = math.floor((elapsed % 3600) / 60)
         local seconds = math.floor(elapsed % 60)
         
-        fastRepTimeLbl:SetDesc(string.format("%dd %dh %dm %ds", days, hours, minutes, seconds))
-        strengthStatsLbl:SetDesc("Strength: " .. formatNum(currentStr) .. " | Gained: " .. formatNum(currentStr - initialStrength))
-        durabilityStatsLbl:SetDesc("Durability: " .. formatNum(currentDur) .. " | Gained: " .. formatNum(currentDur - initialDurability))
-        
         local dt = currentTime - lastSampleTime
-        if dt >= 10 then
-            local strPerSec = (currentStr - lastSampleStr) / dt
-            local durPerSec = (currentDur - lastSampleDur) / dt
-            strengthRateLbl:SetDesc(fmtRate(strPerSec))
-            durabilityRateLbl:SetDesc(fmtRate(durPerSec))
+        if dt >= 5 then
+            strPerSec = (currentStr - lastSampleStr) / dt
+            durPerSec = (currentDur - lastSampleDur) / dt
             lastSampleTime = currentTime
             lastSampleStr = currentStr
             lastSampleDur = currentDur
         end
+
+        updatePara(farmStatsLbl,
+            "Fast Rep Time: " .. string.format("%dd %dh %dm %ds", days, hours, minutes, seconds) ..
+            "\n\nStrength: " .. formatNum(currentStr) .. " | Gained: " .. formatNum(currentStr - initialStrength) ..
+            "\n" .. fmtRate(strPerSec) ..
+            "\n\nDurability: " .. formatNum(currentDur) .. " | Gained: " .. formatNum(currentDur - initialDurability) ..
+            "\n" .. fmtRate(durPerSec)
+        )
         task.wait(1) 
     end
 end)
@@ -916,27 +925,133 @@ speedSection:Button({
     end
 })
 
-speedSection:Button({
-    Title = "Anti Lag",
+local toolsSection = speedFarmTab:Section({ Title = "Tools" })
+
+local farmToolsOptions = {
+    "Pesa",
+    "Puño",
+    "Abdominales",
+    "Flexiones"
+}
+
+local selectedFarmTools = {}
+local autoExecuteToolsActive = false
+local autoExecuteToolsTask = nil
+
+local function findMatchingTool(label)
+    local char = localPlayer.Character
+    local backpack = localPlayer:FindFirstChild("Backpack")
+
+    local keywords = {}
+    if label == "Pesa de Mano" then
+        keywords = { "weight" }
+    elseif label == "Puño" then
+        keywords = { "punch" }
+    elseif label == "Abdominales" then
+        keywords = { "situps", "situp", "ab" }
+    elseif label == "Flexiones" then
+        keywords = { "pushups", "pushup", "push" }
+    end
+
+    local containers = {}
+    if char then table.insert(containers, char) end
+    if backpack then table.insert(containers, backpack) end
+
+    for _, container in ipairs(containers) do
+        for _, item in ipairs(container:GetChildren()) do
+            if item:IsA("Tool") then
+                local lowerName = string.lower(item.Name)
+                for _, kw in ipairs(keywords) do
+                    if string.find(lowerName, kw) then
+                        return item
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+toolsSection:Dropdown({
+    Title = "Seleccionar Tools",
+    Values = farmToolsOptions,
+    Default = "",
+    Callback = function(v)
+        if type(v) == "string" and v ~= "" and not table.find(selectedFarmTools, v) then
+            table.insert(selectedFarmTools, v)
+        end
+    end
+})
+
+toolsSection:Toggle({
+    Title = "Ejecutar Tools Seleccionadas",
+    Default = false,
+    Callback = function(state)
+        autoExecuteToolsActive = state
+        if state then
+            if #selectedFarmTools == 0 then
+                WindUI:Notify({ Title = "Tools", Content = "Selecciona al menos una tool primero", Duration = 3 })
+            end
+            if autoExecuteToolsTask then
+                task.cancel(autoExecuteToolsTask)
+                autoExecuteToolsTask = nil
+            end
+            autoExecuteToolsTask = task.spawn(function()
+                while autoExecuteToolsActive do
+                    pcall(function()
+                        local char = localPlayer.Character
+                        local hum = char and char:FindFirstChildOfClass("Humanoid")
+                        local ev = localPlayer:FindFirstChild("muscleEvent") or localPlayer:FindFirstChild("MuscleEvent")
+
+                        for _, toolLabel in ipairs(selectedFarmTools) do
+                            if not autoExecuteToolsActive then break end
+                            local toolObj = findMatchingTool(toolLabel)
+                            if toolObj and char and hum then
+                                if toolObj.Parent ~= char then
+                                    hum:EquipTool(toolObj)
+                                    task.wait(0.08)
+                                end
+                                pcall(function() toolObj:Activate() end)
+                            end
+
+                            if toolLabel == "Puño" and ev then
+                                pcall(function()
+                                    ev:FireServer("punch", "leftHand")
+                                    ev:FireServer("punch", "rightHand")
+                                end)
+                            elseif ev then
+                                pcall(function()
+                                    ev:FireServer("rep")
+                                end)
+                            end
+                        end
+                    end)
+                    task.wait(0.1)
+                end
+            end)
+        else
+            if autoExecuteToolsTask then
+                task.cancel(autoExecuteToolsTask)
+                autoExecuteToolsTask = nil
+            end
+            local char = localPlayer.Character
+            local backpack = localPlayer:FindFirstChild("Backpack")
+            if char and backpack then
+                for _, item in ipairs(char:GetChildren()) do
+                    if item:IsA("Tool") then
+                        item.Parent = backpack
+                    end
+                end
+            end
+        end
+    end
+})
+
+toolsSection:Button({
+    Title = "Limpiar Tools Seleccionadas",
     Callback = function()
-        for _, obj in pairs(game:GetDescendants()) do
-            if obj:IsA("ParticleEmitter") or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then
-                obj.Enabled = false
-            end
-        end
-        lighting.GlobalShadows = false
-        lighting.FogEnd = 9e9
-        lighting.Brightness = 0
-        settings().Rendering.QualityLevel = 1
-        for _, obj in pairs(game:GetDescendants()) do
-            if obj:IsA("Decal") or obj:IsA("Texture") then
-                obj.Transparency = 1
-            elseif obj:IsA("BasePart") and not obj:IsA("MeshPart") then
-                obj.Material = Enum.Material.SmoothPlastic
-                obj.Reflectance = 0
-            end
-        end
-        WindUI:Notify({ Title = "Anti Lag Activado", Duration = 4 })
+        table.clear(selectedFarmTools)
+        WindUI:Notify({ Title = "Tools", Content = "Selección limpiada", Duration = 2 })
     end
 })
 
@@ -1193,6 +1308,198 @@ rbSectionNormal:Toggle({
         end
     end
 })
+
+-- ==========================================
+-- PESTAÑA DE ESTADÍSTICAS (EXTRAÍDA)
+-- ==========================================
+local statsTab = Window:Tab({ Title = "Estadisticas", Icon = "bar-chart-2" })
+local statsSection = statsTab:Section({ Title = "Player Stats & Damage" })
+
+local selectedTargetUser = ""
+
+local function getPlayerList()
+    local list = {}
+    for _, p in ipairs(players:GetPlayers()) do
+        table.insert(list, p.DisplayName .. " | " .. p.Name)
+    end
+    return list
+end
+
+local playerDropdown = statsSection:Dropdown({
+    Title = "Select Player",
+    Values = getPlayerList(),
+    Default = "",
+    Callback = function(text)
+        if type(text) == "string" then
+            selectedTargetUser = text:match("|%s*(.+)$") or text
+        end
+    end
+})
+
+local function refreshPlayerDropdown()
+    pcall(function()
+        if type(playerDropdown.Refresh) == "function" then
+            playerDropdown:Refresh(getPlayerList())
+        elseif type(playerDropdown.SetValues) == "function" then
+            playerDropdown:SetValues(getPlayerList())
+        end
+    end)
+end
+
+players.PlayerAdded:Connect(refreshPlayerDropdown)
+players.PlayerRemoving:Connect(refreshPlayerDropdown)
+
+local function formatCommas(num)
+    local str = tostring(math.floor(tonumber(num) or 0))
+    return str:reverse():gsub("(%d%d%d)", "%1,"):reverse():gsub("^,", "")
+end
+
+local function formatShort(num)
+    local n = tonumber(num) or 0
+    local suffixes = {
+        { 1e18, "Qi" },
+        { 1e15, "Qa" },
+        { 1e12, "T" },
+        { 1e9,  "B" },
+        { 1e6,  "M" },
+        { 1e3,  "K" },
+    }
+    for _, s in ipairs(suffixes) do
+        if math.abs(n) >= s[1] then
+            return string.format("%.2f%s", n / s[1], s[2])
+        end
+    end
+    return tostring(math.floor(n))
+end
+
+local function formatStatValue(val)
+    if val == nil then return "N/A" end
+    if type(val) == "number" then
+        return "[ " .. formatCommas(val) .. " | " .. formatShort(val) .. " ]"
+    end
+    return tostring(val)
+end
+
+local function countEquippedPet(plr, petName)
+    local equippedPets = plr and plr:FindFirstChild("equippedPets")
+    if not equippedPets then return 0 end
+    local count = 0
+    for _, slot in ipairs(equippedPets:GetChildren()) do
+        local ref = slot:FindFirstChild("petReference")
+        if ref and ref.Value and ref.Value.Name == petName then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+local function getEnemyDurabilityHealth(plr)
+    if not plr then return 0 end
+    local durObj = plr:FindFirstChild("Durability") or (plr:FindFirstChild("leaderstats") and plr.leaderstats:FindFirstChild("Durability"))
+    local baseDur = (durObj and tonumber(durObj.Value)) or 0
+    local ultimates = plr:FindFirstChild("ultimatesFolder")
+    local mult = 1
+    if ultimates and ultimates:FindFirstChild("Infernal Health") then
+        mult = mult + (0.15 * (tonumber(ultimates["Infernal Health"].Value) or 0))
+    end
+    return baseDur * mult
+end
+
+local wildWizardLbl = statsSection:Paragraph({ Title = "Wild Wizard Bonus", Desc = "Wild Wizard equipped: 0 (0 bonus)" })
+
+local function getMyDamage()
+    local strObj = localPlayer:FindFirstChild("leaderstats") and localPlayer.leaderstats:FindFirstChild("Strength")
+    if not strObj then
+        updatePara(wildWizardLbl, "Wild Wizard equipped: 0 (0 bonus)")
+        return 0
+    end
+    local baseDmg = (tonumber(strObj.Value) or 0) * 0.1
+    local wizCount = countEquippedPet(localPlayer, "Wild Wizard")
+    local bonusMult = wizCount * 0.33
+    local bonusVal = baseDmg * bonusMult
+    updatePara(wildWizardLbl, "Wild Wizard equipped: " .. tostring(wizCount) .. " (" .. formatStatValue(bonusVal) .. " bonus)")
+    return baseDmg * (1 + bonusMult)
+end
+
+local function calcBlowsToKill(enemyHp, myDmg)
+    if myDmg <= 0 then return "∞" end
+    local blows = math.ceil(enemyHp / myDmg)
+    if blows > 50 then return "∞" end
+    if blows < 1 then return 1 end
+    return blows
+end
+
+local mainStatsLbl = statsSection:Paragraph({
+    Title = "Player Stats",
+    Desc = "Strength: N/A\nGems: N/A\nRebirth: N/A\nAgility: N/A\nDurability: N/A\nKills: N/A\nMuscle King Time: N/A\nCurrent Map: N/A\nCustom Size: N/A\nCustom Speed: N/A\nEvil Karma: N/A\nGood Karma: N/A"
+})
+
+local advStatsLbl = statsSection:Paragraph({
+    Title = "Stats Advanced",
+    Desc = "Enemy life: N/A\nYour damage: N/A\nBlows to kill him: N/A"
+})
+
+local function updateStatsView(targetPlr)
+    if not targetPlr then
+        updatePara(mainStatsLbl,
+            "Strength: N/A\nGems: N/A\nRebirth: N/A\nAgility: N/A\nDurability: N/A\nKills: N/A\n" ..
+            "Muscle King Time: N/A\nCurrent Map: N/A\nCustom Size: N/A\nCustom Speed: N/A\nEvil Karma: N/A\nGood Karma: N/A"
+        )
+        updatePara(advStatsLbl, "Enemy life: N/A\nYour damage: N/A\nBlows to kill him: N/A")
+        updatePara(wildWizardLbl, "Wild Wizard equipped: 0 (0 bonus)")
+        return
+    end
+
+    local ls = targetPlr:FindFirstChild("leaderstats")
+    local strVal = ls and ls:FindFirstChild("Strength") and ls.Strength.Value or nil
+    local gemsVal = targetPlr:FindFirstChild("Gems") and targetPlr.Gems.Value or nil
+    local rebVal = ls and ls:FindFirstChild("Rebirths") and ls.Rebirths.Value or nil
+    local agiVal = targetPlr:FindFirstChild("Agility") and targetPlr.Agility.Value or nil
+    local durVal = (targetPlr:FindFirstChild("Durability") and targetPlr.Durability.Value)
+        or (ls and ls:FindFirstChild("Durability") and ls.Durability.Value) or nil
+    local killsVal = ls and ls:FindFirstChild("Kills") and ls.Kills.Value or nil
+    local mkTimeVal = targetPlr:FindFirstChild("muscleKingTime") and targetPlr.muscleKingTime.Value or nil
+    local mapVal = targetPlr:FindFirstChild("currentMap") and targetPlr.currentMap.Value or nil
+    local sizeVal = targetPlr:FindFirstChild("customSize") and targetPlr.customSize.Value or nil
+    local speedVal = targetPlr:FindFirstChild("customSpeed") and targetPlr.customSpeed.Value or nil
+    local evilVal = targetPlr:FindFirstChild("evilKarma") and targetPlr.evilKarma.Value or nil
+    local goodVal = targetPlr:FindFirstChild("goodKarma") and targetPlr.goodKarma.Value or nil
+
+    local enemyHp = getEnemyDurabilityHealth(targetPlr)
+    local myDmg = getMyDamage()
+    local blows = calcBlowsToKill(enemyHp, myDmg)
+
+    updatePara(mainStatsLbl,
+        "Strength: " .. formatStatValue(strVal) ..
+        "\nGems: " .. formatStatValue(gemsVal) ..
+        "\nRebirth: " .. formatStatValue(rebVal) ..
+        "\nAgility: " .. formatStatValue(agiVal) ..
+        "\nDurability: " .. formatStatValue(durVal) ..
+        "\nKills: " .. formatStatValue(killsVal) ..
+        "\nMuscle King Time: " .. formatStatValue(mkTimeVal) ..
+        "\nCurrent Map: " .. (mapVal ~= nil and tostring(mapVal) or "N/A") ..
+        "\nCustom Size: " .. formatStatValue(sizeVal) ..
+        "\nCustom Speed: " .. formatStatValue(speedVal) ..
+        "\nEvil Karma: " .. formatStatValue(evilVal) ..
+        "\nGood Karma: " .. formatStatValue(goodVal)
+    )
+
+    updatePara(advStatsLbl,
+        "Enemy life: " .. (enemyHp > 0 and formatStatValue(enemyHp) or "N/A") ..
+        "\nYour damage: " .. (myDmg > 0 and formatStatValue(myDmg) or "N/A") ..
+        "\nBlows to kill him: " .. tostring(blows)
+    )
+end
+
+task.spawn(function()
+    while true do
+        pcall(function()
+            local target = (selectedTargetUser ~= "" and players:FindFirstChild(selectedTargetUser)) or nil
+            updateStatsView(target)
+        end)
+        task.wait(0.25)
+    end
+end)
 
 local tabAlien = Window:Tab({ Title = "Alien", Icon = "crosshair" })
 local alienAutoSection = tabAlien:Section({ Title = "Alien Automation", TextXAlignment = "Left" })
@@ -2235,5 +2542,43 @@ extrasSection:Dropdown({
         if v == "Night" then lighting.ClockTime = 0
         elseif v == "Day" then lighting.ClockTime = 12
         elseif v == "Midnight" then lighting.ClockTime = 6 end
+    end
+})
+
+local extrasPerfSection = extrasTab:Section({ Title = "Rendimiento y Ejecución" })
+
+extrasPerfSection:Button({
+    Title = "Anti Lag",
+    Callback = function()
+        for _, obj in pairs(game:GetDescendants()) do
+            if obj:IsA("ParticleEmitter") or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then
+                obj.Enabled = false
+            end
+        end
+        lighting.GlobalShadows = false
+        lighting.FogEnd = 9e9
+        lighting.Brightness = 0
+        settings().Rendering.QualityLevel = 1
+        for _, obj in pairs(game:GetDescendants()) do
+            if obj:IsA("Decal") or obj:IsA("Texture") then
+                obj.Transparency = 1
+            elseif obj:IsA("BasePart") and not obj:IsA("MeshPart") then
+                obj.Material = Enum.Material.SmoothPlastic
+                obj.Reflectance = 0
+            end
+        end
+        WindUI:Notify({ Title = "Anti Lag Activado", Duration = 4 })
+    end
+})
+
+extrasPerfSection:Button({
+    Title = "Auto Rejoin",
+    Callback = function()
+    end
+})
+
+extrasPerfSection:Button({
+    Title = "Auto Execute",
+    Callback = function()
     end
 })
