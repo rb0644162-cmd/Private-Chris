@@ -137,11 +137,19 @@ local function formatNum(p1)
 end
 
 local function fmtRate(r)
-    return "Per second: " .. formatNum(r) ..
-        "\nPer minute: " .. formatNum(r * 60) ..
-        "\nPer hour: " .. formatNum(r * 3600) ..
+    return "Per hour: " .. formatNum(r * 3600) ..
         "\nPer day: " .. formatNum(r * 86400) ..
-        "\nPer week: " .. formatNum(r * 604800)
+        "\nPer week: " .. formatNum(r * 604800) ..
+        "\nPer month: " .. formatNum(r * 2592000)
+end
+
+local function formatDuration(elapsed)
+    local totalSec = math.max(0, math.floor(elapsed or 0))
+    local days = math.floor(totalSec / 86400)
+    local hours = math.floor((totalSec % 86400) / 3600)
+    local minutes = math.floor((totalSec % 3600) / 60)
+    local seconds = math.floor(totalSec % 60)
+    return string.format("%dd %dh %dm %ds", days, hours, minutes, seconds)
 end
 
 local function getDurabilityValue()
@@ -749,12 +757,61 @@ local function stopAutoSell()
     autoSell.Status = "Idle"
 end
 
+-- ==========================================
+-- PESTAÑA HOME (PRIMERA PESTAÑA)
+-- ==========================================
+local homeTab = Window:Tab({ Title = "Home", Icon = "layout-dashboard" })
+
+local homePlayerSection = homeTab:Section({ Title = "Player", Icon = "user" })
+homePlayerSection:Paragraph({
+    Title = "Player info",
+    Desc = "Display name: " .. tostring(localPlayer.DisplayName) ..
+        "\nUsername: " .. tostring(localPlayer.Name) ..
+        "\nUser ID: " .. tostring(localPlayer.UserId) ..
+        "\nAccount age: " .. tostring(localPlayer.AccountAge) .. " days"
+})
+
+homePlayerSection:Button({
+    Title = "Copy User ID",
+    Callback = function()
+        local idText = tostring(localPlayer.UserId)
+        local copied = false
+        if type(setclipboard) == "function" then
+            copied = pcall(setclipboard, idText)
+        elseif type(toclipboard) == "function" then
+            copied = pcall(toclipboard, idText)
+        end
+        WindUI:Notify({
+            Title = "Home",
+            Content = copied and ("User ID copiado: " .. idText) or ("User ID: " .. idText),
+            Duration = 3
+        })
+    end
+})
+
+local homeGameSection = homeTab:Section({ Title = "Game", Icon = "gamepad-2" })
+homeGameSection:Paragraph({
+    Title = "Game info",
+    Desc = "Name: Muscle Legends\nPlace ID: " .. tostring(game.PlaceId) .. "\nGame ID: " .. tostring(game.GameId)
+})
+
+-- ==========================================
+-- SPEED FARM
+-- ==========================================
 local speedFarmTab = Window:Tab({ Title = "Speed Farm", Icon = "zap" })
 local speedSection = speedFarmTab:Section({ Title = "Farm & Funtions", Icon = "flame" })
 
+local function buildFarmStatsText(elapsed, currentStr, gainedStr, strPerSec, currentDur, gainedDur, durPerSec)
+    return "Fast Rep Time: " .. formatDuration(elapsed) ..
+        "\n\nStrength Rate:\n" .. fmtRate(strPerSec) ..
+        "\n\nDurability Rate:\n" .. fmtRate(durPerSec) ..
+        "\n\nStrength: " .. formatNum(currentStr) .. " | Gained: " .. formatNum(gainedStr) ..
+        "\nDurability: " .. formatNum(currentDur) .. " | Gained: " .. formatNum(gainedDur)
+end
+
 local farmStatsLbl = speedSection:Paragraph({
     Title = "Farm Stats",
-    Desc = "Fast Rep Time: 0d 0h 0m 0s\n\nStrength: 0 | Gained: 0\n" .. fmtRate(0) .. "\n\nDurability: 0 | Gained: 0\n" .. fmtRate(0)
+    Desc = buildFarmStatsText(0, 0, 0, 0, 0, 0, 0)
 })
 
 local repSpeedVal = 55
@@ -762,7 +819,7 @@ speedSection:Input({
     Title = "Velocidad de Reps",
     Value = "50",
     Callback = function(v)
-        local num = tonumber(v)
+        local num = tonumber(tostring(v or ""):gsub(",", "."))
         if num and num > 0 then repSpeedVal = num end
     end
 })
@@ -839,11 +896,6 @@ task.spawn(function()
         local currentDur = stats.Dur
         local elapsed = currentTime - startTimeTick
         
-        local days = math.floor(elapsed / 86400)
-        local hours = math.floor((elapsed % 86400) / 3600)
-        local minutes = math.floor((elapsed % 3600) / 60)
-        local seconds = math.floor(elapsed % 60)
-        
         local dt = currentTime - lastSampleTime
         if dt >= 5 then
             strPerSec = (currentStr - lastSampleStr) / dt
@@ -853,13 +905,15 @@ task.spawn(function()
             lastSampleDur = currentDur
         end
 
-        updatePara(farmStatsLbl,
-            "Fast Rep Time: " .. string.format("%dd %dh %dm %ds", days, hours, minutes, seconds) ..
-            "\n\nStrength: " .. formatNum(currentStr) .. " | Gained: " .. formatNum(currentStr - initialStrength) ..
-            "\n" .. fmtRate(strPerSec) ..
-            "\n\nDurability: " .. formatNum(currentDur) .. " | Gained: " .. formatNum(currentDur - initialDurability) ..
-            "\n" .. fmtRate(durPerSec)
-        )
+        updatePara(farmStatsLbl, buildFarmStatsText(
+            elapsed,
+            currentStr,
+            currentStr - initialStrength,
+            strPerSec,
+            currentDur,
+            currentDur - initialDurability,
+            durPerSec
+        ))
         task.wait(1) 
     end
 end)
@@ -1102,36 +1156,67 @@ toolsSection:Button({
     end
 })
 
+-- ==========================================
+-- PESTAÑA REBIRTHS (UNIFICADA Y COMPLETA)
+-- ==========================================
 local rebirthsTab = Window:Tab({ Title = "Rebirths", Icon = "repeat" })
 local rbSectionPets = rebirthsTab:Section({ Title = "Rebirths Packs", Icon = "sparkles" })
 
 local bestPets = { "Swift Samurai", "Omega Overlord", "Mythic Boss Pet", "Legendary Boss Pet", "Rainbow Boss Pet", "Zeus Spark", "Epic Boss Pet"}
 local eclipsePets = { "Tribal Overlord", "Titanium Hydra", "Eclipse Devourer" }
 
-local rbTimeLbl = rbSectionPets:Paragraph({ Title = "Tiempo", Desc = "0d 0h 0m 0s" })
-local rbStatsLbl = rbSectionPets:Paragraph({ Title = "Renacimientos", Desc = "0 | Ganados: 0" })
-local reqStrengthLbl = rbSectionPets:Paragraph({ Title = "Fuerza Necesaria", Desc = "0" })
-
 local function getRequiredStrength()
     return math.floor(5000 + 2500 * getStats().Reb)
 end
 
+local function buildRebirthStatsText(modeLabel, elapsed, currentReb, gainedReb, rebPerSec, currentStr, reqStr)
+    local missingStr = math.max(0, reqStr - currentStr)
+    local reqStatus = missingStr > 0
+        and ("Required Strength: " .. formatNum(reqStr) .. " | Missing: " .. formatNum(missingStr))
+        or ("Required Strength: " .. formatNum(reqStr) .. " | Ready!")
+
+    return modeLabel .. " Time: " .. formatDuration(elapsed) ..
+        "\nRebirths: " .. formatNum(currentReb) .. " | Gained: " .. formatNum(gainedReb) ..
+        "\n" .. reqStatus ..
+        "\n\nRebirths Rate:\n" .. fmtRate(rebPerSec)
+end
+
+local packsRebirthStatsLbl = rbSectionPets:Paragraph({
+    Title = "Rebirth Stats (Packs)",
+    Desc = buildRebirthStatsText("Rebirths Packs", 0, 0, 0, 0, 0, getRequiredStrength())
+})
+
 task.spawn(function()
-    task.wait(2)
-    local sessionStartRebirths = getStats().Reb
-    local rbStartTime = tick()
+    task.wait(1)
+    local startReb = getStats().Reb
+    local startTime = tick()
+    local lastSampleTime = startTime
+    local lastSampleReb = startReb
+    local rebPerSec = 0
+
     while true do
-        local elapsed = tick() - rbStartTime
-        local days = math.floor(elapsed / 86400)
-        local hours = math.floor((elapsed % 86400) / 3600)
-        local minutes = math.floor((elapsed % 3600) / 60)
-        local seconds = math.floor(elapsed % 60)
-        
-        rbTimeLbl:SetDesc(string.format("%dd %dh %dm %ds", days, hours, minutes, seconds))
-        local currentReb = getStats().Reb
-        local g = currentReb - sessionStartRebirths
-        rbStatsLbl:SetDesc("Renacimientos: " .. formatNum(currentReb) .. " | Ganados: " .. formatNum(g))
-        reqStrengthLbl:SetDesc("Fuerza Necesaria: " .. formatNum(getRequiredStrength()))
+        local now = tick()
+        local st = getStats()
+        local currentReb = st.Reb
+        local gainedReb = currentReb - startReb
+        local elapsed = now - startTime
+
+        local dt = now - lastSampleTime
+        if dt >= 5 then
+            rebPerSec = (currentReb - lastSampleReb) / dt
+            lastSampleTime = now
+            lastSampleReb = currentReb
+        end
+
+        updatePara(packsRebirthStatsLbl, buildRebirthStatsText(
+            "Rebirths Packs",
+            elapsed,
+            currentReb,
+            gainedReb,
+            rebPerSec,
+            st.Str,
+            getRequiredStrength()
+        ))
         task.wait(1)
     end
 end)
@@ -1248,26 +1333,42 @@ rbSectionPets:Button({
 
 local rbSectionNormal = rebirthsTab:Section({ Title = "Rebirth Normal", Icon = "refresh-cw" })
 
-local timeLabelNew = rbSectionNormal:Paragraph({ Title = "Time", Desc = "0d 0h 0m 0s" })
-local gainedLabelNew = rbSectionNormal:Paragraph({ Title = "Gained Rebirths", Desc = "0" })
-local fuerzaNecesariaNew = rbSectionNormal:Paragraph({ Title = "Fuerza Necesaria", Desc = "0" })
+local normalRebirthStatsLbl = rbSectionNormal:Paragraph({
+    Title = "Rebirth Stats (Normal)",
+    Desc = buildRebirthStatsText("Rebirth Normal", 0, 0, 0, 0, 0, getRequiredStrength())
+})
 
 task.spawn(function()
-    task.wait(2)
-    local startTimeNew = tick()
-    local sessionRebirthsNew = getStats().Reb
-    while true do
-        local elapsed = tick() - startTimeNew
-        local days = math.floor(elapsed / 86400)
-        local hours = math.floor((elapsed % 86400) / 3600)
-        local minutes = math.floor((elapsed % 3600) / 60)
-        local seconds = math.floor(elapsed % 60)
-        timeLabelNew:SetDesc(string.format("%dd %dh %dm %ds", days, hours, minutes, seconds))
+    task.wait(1)
+    local startReb = getStats().Reb
+    local startTime = tick()
+    local lastSampleTime = startTime
+    local lastSampleReb = startReb
+    local rebPerSec = 0
 
-        local gainedRebirths = getStats().Reb - sessionRebirthsNew
-        gainedLabelNew:SetDesc(tostring(gainedRebirths))
-        fuerzaNecesariaNew:SetDesc(formatNum(getRequiredStrength()))
-        
+    while true do
+        local now = tick()
+        local st = getStats()
+        local currentReb = st.Reb
+        local gainedReb = currentReb - startReb
+        local elapsed = now - startTime
+
+        local dt = now - lastSampleTime
+        if dt >= 5 then
+            rebPerSec = (currentReb - lastSampleReb) / dt
+            lastSampleTime = now
+            lastSampleReb = currentReb
+        end
+
+        updatePara(normalRebirthStatsLbl, buildRebirthStatsText(
+            "Rebirth Normal",
+            elapsed,
+            currentReb,
+            gainedReb,
+            rebPerSec,
+            st.Str,
+            getRequiredStrength()
+        ))
         task.wait(1)
     end
 end)
@@ -1285,9 +1386,14 @@ rbSectionNormal:Toggle({
                     local backpack = localPlayer:FindFirstChild("Backpack")
                     local character = localPlayer.Character
                     if backpack and character then
-                        for _, tool in ipairs(backpack:GetChildren()) do
-                            if tool:IsA("Tool") and (tool.Name:find("Bar") or tool.Name:find("Weight") or tool.Name:find("Bottle") or tool.Name:find("Pushups") or tool.Name:find("Handstands")) then
-                                tool.Parent = character
+                        local equippedWeight = character:FindFirstChildWhichIsA("Tool")
+                        local hasWeightEquipped = equippedWeight and string.find(string.lower(equippedWeight.Name), "weight")
+                        if not hasWeightEquipped then
+                            for _, tool in ipairs(backpack:GetChildren()) do
+                                if tool:IsA("Tool") and string.find(string.lower(tool.Name), "weight") then
+                                    tool.Parent = character
+                                    break
+                                end
                             end
                         end
                     end
@@ -1315,9 +1421,9 @@ rbSectionNormal:Toggle({
 })
 
 -- ==========================================
--- PESTAÑA DE ESTADÍSTICAS (EXTRAÍDA)
+-- PESTAÑA DE ESTADÍSTICAS
 -- ==========================================
-local statsTab = Window:Tab({ Title = "Estadisticas", Icon = "bar-chart-2" })
+local statsTab = Window:Tab({ Title = "Estadisticas", Icon = "trending-up" })
 local statsSection = statsTab:Section({ Title = "Player Stats & Damage", Icon = "activity" })
 
 local selectedTargetUser = ""
@@ -1514,6 +1620,9 @@ task.spawn(function()
     end
 end)
 
+-- ==========================================
+-- ALIEN & PETS
+-- ==========================================
 local tabAlien = Window:Tab({ Title = "Alien", Icon = "crosshair" })
 local alienAutoSection = tabAlien:Section({ Title = "Alien Automation", Icon = "bot", TextXAlignment = "Left" })
 
@@ -1914,6 +2023,9 @@ petsSection:Toggle({
     end
 })
 
+-- ==========================================
+-- BOSSES
+-- ==========================================
 local bossesTab = Window:Tab({ Title = "Bosses", Icon = "crown" })
 local bossSectionMain = bossesTab:Section({ Title = "Boss Automation", Icon = "sword" })
 
@@ -1947,9 +2059,8 @@ for _, bossName in ipairs(REGULAR_BOSS_NAMES) do
 end
 
 -- ==========================================
--- PESTAÑA: BRAWL (AISLADA)
+-- PESTAÑA: BRAWL
 -- ==========================================
-
 local brawlTab = Window:Tab({ Title = "Brawl", Icon = "swords" })
 local brawlSection = brawlTab:Section({ Title = "Controles de Brawl", Icon = "flame" })
 
@@ -1963,15 +2074,6 @@ brawlSection:Toggle({
 })
 
 getgenv().AutoBrawlKill = false
-local targetPlayerNameInput = ""
-
-brawlSection:Input({
-    Title = "Cuenta Prioritaria (Opcional)",
-    Value = "",
-    Callback = function(v)
-        targetPlayerNameInput = v
-    end
-})
 
 brawlSection:Toggle({
     Title = "Win Brawl",
@@ -1989,16 +2091,6 @@ local previousState = {
 
 local function getBrawlTarget()
     if not inBrawlSession then return nil end
-
-    if targetPlayerNameInput ~= "" then
-        local specific = players:FindFirstChild(targetPlayerNameInput)
-        if specific and specific ~= localPlayer and specific.Character then
-            local hum = specific.Character:FindFirstChildOfClass("Humanoid")
-            if hum and hum.Health > 0 then
-                return specific
-            end
-        end
-    end
 
     local myChar = localPlayer.Character
     local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
@@ -2097,7 +2189,7 @@ task.spawn(function()
                         
                         local backpack = localPlayer:FindFirstChild("Backpack")
                         local punch = char:FindFirstChild("Punch") or (backpack and backpack:FindFirstChild("Punch"))
-                        local humanoid = char:FindFirstChildOfClass("Humanoid")
+                        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
                         
                         if punch and punch.Parent == backpack and humanoid then
                             humanoid:EquipTool(punch)
@@ -2122,6 +2214,9 @@ task.spawn(function()
     end
 end)
 
+-- ==========================================
+-- KILLS
+-- ==========================================
 local killsTab = Window:Tab({ Title = "Kills", Icon = "skull" })
 local killsSection = killsTab:Section({ Title = "Kill Contenido", Icon = "crosshair" })
 
@@ -2441,6 +2536,9 @@ killsSection:Toggle({
     end
 })
 
+-- ==========================================
+-- EMOTES
+-- ==========================================
 local emotesTab = Window:Tab({ Title = "Emotes", Icon = "smile" })
 local emotesSection = emotesTab:Section({ Title = "Emotes", Icon = "sparkles" })
 
@@ -2454,6 +2552,9 @@ emotesSection:Button({
     end
 })
 
+-- ==========================================
+-- EXTRAS
+-- ==========================================
 local extrasTab = Window:Tab({ Title = "Extras", Icon = "settings" })
 local extrasSection = extrasTab:Section({ Title = "Misc y Utilidades", Icon = "wrench" })
 
@@ -2477,22 +2578,6 @@ extrasSection:Toggle({
                     pcall(function()
                         replicatedStorage.rEvents.openFortuneWheelRemote:InvokeServer("openFortuneWheel", replicatedStorage.shared.catalogs.fortuneWheelChances["Fortune Wheel"])
                     end)
-                end
-            end)
-        end
-    end
-})
-
-extrasSection:Toggle({
-    Title = "Infinite Jump",
-    Default = false,
-    Callback = function(state)
-        _G.InfiniteJump = state
-        if state then
-            userInputService.JumpRequest:Connect(function()
-                if _G.InfiniteJump and localPlayer.Character then
-                    local hum = localPlayer.Character:FindFirstChildOfClass("Humanoid")
-                    if hum then hum:ChangeState("Jumping") end
                 end
             end)
         end
@@ -2686,7 +2771,7 @@ extrasSection:Dropdown({
 })
 
 -- ==========================================
--- NUEVA SECCIÓN DESPLEGABLE EN EXTRAS
+-- UTILIDADES DE PERSONAJE (SIZE, VELOCIDAD, INFINITE JUMP)
 -- ==========================================
 local charExtrasSection = extrasTab:Section({ Title = "Utilidades de Personaje", Icon = "user-plus" })
 
@@ -2698,7 +2783,8 @@ charExtrasSection:Input({
     Title = "Número de Size",
     Value = "2",
     Callback = function(v)
-        local num = tonumber(v)
+        local cleaned = tostring(v or ""):gsub(",", ".")
+        local num = tonumber(cleaned)
         if num and num > 0 then
             customSizeValue = num
         end
@@ -2736,6 +2822,87 @@ charExtrasSection:Toggle({
         end
     end
 })
+
+local customSpeedValue = 120
+local autoSpeedActive = false
+local autoSpeedTask = nil
+
+charExtrasSection:Input({
+    Title = "Velocidad de Caminata",
+    Value = "120",
+    Callback = function(v)
+        local cleaned = tostring(v or ""):gsub(",", ".")
+        local num = tonumber(cleaned)
+        if num and num > 0 then
+            customSpeedValue = num
+        end
+    end
+})
+
+charExtrasSection:Toggle({
+    Title = "Auto Velocidad",
+    Default = false,
+    Callback = function(state)
+        autoSpeedActive = state
+        if autoSpeedTask then
+            task.cancel(autoSpeedTask)
+            autoSpeedTask = nil
+        end
+
+        if autoSpeedActive then
+            autoSpeedTask = task.spawn(function()
+                while autoSpeedActive do
+                    pcall(function()
+                        local char = localPlayer.Character
+                        local hum = char and char:FindFirstChildOfClass("Humanoid")
+                        if hum and hum.Health > 0 then
+                            hum.WalkSpeed = customSpeedValue
+                        end
+                        local remote = replicatedStorage:FindFirstChild("rEvents")
+                            and replicatedStorage.rEvents:FindFirstChild("changeSpeedSizeRemote")
+                        if remote then
+                            pcall(function()
+                                remote:InvokeServer("changeSpeed", customSpeedValue)
+                            end)
+                        end
+                    end)
+                    task.wait(0.2)
+                end
+            end)
+            WindUI:Notify({
+                Title = "Auto Velocidad",
+                Content = "Velocidad configurada en: " .. tostring(customSpeedValue),
+                Duration = 2
+            })
+        else
+            pcall(function()
+                local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    hum.WalkSpeed = 16
+                end
+            end)
+        end
+    end
+})
+
+local infiniteJumpEnabled = false
+charExtrasSection:Toggle({
+    Title = "Infinite Jump",
+    Default = false,
+    Callback = function(state)
+        infiniteJumpEnabled = state
+        _G.InfiniteJump = state
+    end
+})
+
+userInputService.JumpRequest:Connect(function()
+    if infiniteJumpEnabled and localPlayer.Character then
+        local hum = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum and hum.Health > 0 then
+            hum:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end
+end)
 
 local extrasPerfSection = extrasTab:Section({ Title = "Rendimiento y Ejecución", Icon = "cpu" })
 
