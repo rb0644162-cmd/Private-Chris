@@ -66,8 +66,42 @@ local autoSell = {
     LastSell = 0,
     Status = "Idle",
     Sold = 0,
-    TargetPets = { UFOBot = true, CosmicInvader = false, AlienSlime = false },
-    KeepOneUFOBot = false,
+    KeepOnePerType = false,
+    SelectedPets = {},
+}
+
+local autoEvo = {
+    Enabled = false,
+    Conn = nil,
+    EvoInterval = 0.5,
+    LastEvo = 0,
+    Status = "Idle",
+    Evolved = 0,
+    KeepOneBase = false,
+    SelectedPets = {},
+}
+
+local alienPetsSellList = {
+    "Spore Beast",
+    "Rift Hydra",
+    "Phase Mantis",
+    "Nebula Moth"
+}
+
+local alienAutoSell = {
+    Enabled = false,
+    Conn = nil,
+    SellInterval = 0.3,
+    LastSell = 0,
+    Status = "Idle",
+    Sold = 0,
+    KeepOnePerType = false,
+    SelectedPets = {
+        ["Spore Beast"] = false,
+        ["Rift Hydra"] = false,
+        ["Phase Mantis"] = false,
+        ["Nebula Moth"] = false,
+    }
 }
 
 local alienShopItems = {
@@ -619,8 +653,69 @@ local function startAutoBuyAlienShop()
     end)
 end
 
-local function normalizeName(str)
-    return string.lower(str):gsub("[%s_%-%.]", "")
+local function isExcludedNonPet(nameStr, folderNameStr)
+    local n = string.lower(tostring(nameStr or ""))
+    local fn = string.lower(tostring(folderNameStr or ""))
+    if string.find(fn, "aura") or string.find(fn, "trail") or string.find(fn, "egg") or string.find(fn, "equipped") then
+        return true
+    end
+    local blocked = {
+        "aura", "trail", "protein", "egg", "shake", "bar", "blade", "sword",
+        "weight", "punch", "pushup", "situp", "gem", "coin", "chest", "key", "potion", "serum"
+    }
+    for _, word in ipairs(blocked) do
+        if string.find(n, word, 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
+local function isPetEquipped(petInstance)
+    local equippedPets = localPlayer:FindFirstChild("equippedPets")
+    if not equippedPets then return false end
+    for _, slot in ipairs(equippedPets:GetChildren()) do
+        if slot == petInstance then
+            return true
+        end
+        for _, desc in ipairs(slot:GetDescendants()) do
+            if desc:IsA("ObjectValue") and desc.Value == petInstance then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function getOwnedPets()
+    local owned = {}
+    local petsFolder = localPlayer:FindFirstChild("petsFolder")
+    if not petsFolder then return owned end
+
+    for _, folder in ipairs(petsFolder:GetChildren()) do
+        if folder:IsA("Folder") and not isExcludedNonPet(folder.Name, folder.Name) then
+            for _, pet in ipairs(folder:GetChildren()) do
+                if not isExcludedNonPet(pet.Name, folder.Name) then
+                    table.insert(owned, pet)
+                end
+            end
+        elseif not isExcludedNonPet(folder.Name, "") then
+            table.insert(owned, folder)
+        end
+    end
+    return owned
+end
+
+local function getOwnedPetNames()
+    local names, seen = {}, {}
+    for _, pet in ipairs(getOwnedPets()) do
+        if not seen[pet.Name] then
+            seen[pet.Name] = true
+            table.insert(names, pet.Name)
+        end
+    end
+    table.sort(names)
+    return names
 end
 
 local function findSellRemote()
@@ -668,44 +763,25 @@ local function sellPet(remote, petInstance)
     return ok
 end
 
-local function getPetsToSell()
+local function getPetsToSellFromProperty()
     local toSell = {}
-    local petsFolder = localPlayer:FindFirstChild("petsFolder")
-    if not petsFolder then return toSell end
-    local ufoBots, cosmicInvaders, alienSlimes = {}, {}, {}
-    for _, folder in ipairs(petsFolder:GetChildren()) do
-        if folder:IsA("Folder") then
-            for _, pet in ipairs(folder:GetChildren()) do
-                local n = normalizeName(pet.Name)
-                if n == "ufobot" then
-                    table.insert(ufoBots, pet)
-                elseif n == "cosmicinvader" then
-                    table.insert(cosmicInvaders, pet)
-                elseif n == "alienslime" then
-                    table.insert(alienSlimes, pet)
-                end
-            end
+    local grouped = {}
+
+    for _, pet in ipairs(getOwnedPets()) do
+        if autoSell.SelectedPets[pet.Name] and not isPetEquipped(pet) then
+            grouped[pet.Name] = grouped[pet.Name] or {}
+            table.insert(grouped[pet.Name], pet)
         end
     end
-    if autoSell.TargetPets.UFOBot then
-        local count = #ufoBots
-        if autoSell.KeepOneUFOBot then
-            count = math.max(0, count - 1)
-        end
-        for i = 1, count do
-            table.insert(toSell, ufoBots[i])
-        end
-    end
-    if autoSell.TargetPets.CosmicInvader then
-        for _, pet in ipairs(cosmicInvaders) do
-            table.insert(toSell, pet)
+
+    for _, listPets in pairs(grouped) do
+        local total = #listPets
+        local sellCount = autoSell.KeepOnePerType and math.max(0, total - 1) or total
+        for i = 1, sellCount do
+            table.insert(toSell, listPets[i])
         end
     end
-    if autoSell.TargetPets.AlienSlime then
-        for _, pet in ipairs(alienSlimes) do
-            table.insert(toSell, pet)
-        end
-    end
+
     return toSell
 end
 
@@ -727,7 +803,7 @@ local function startAutoSell()
             pcall(function()
                 local now = tick()
                 if now - autoSell.LastSell >= autoSell.SellInterval then
-                    local pets = getPetsToSell()
+                    local pets = getPetsToSellFromProperty()
                     if #pets > 0 then
                         for _, pet in ipairs(pets) do
                             if not autoSell.Enabled then break end
@@ -738,7 +814,7 @@ local function startAutoSell()
                         end
                         autoSell.Status = "Total sold: " .. autoSell.Sold
                     else
-                        autoSell.Status = "Waiting for target pets..."
+                        autoSell.Status = "Reading owned pets..."
                     end
                     autoSell.LastSell = tick()
                 end
@@ -757,9 +833,205 @@ local function stopAutoSell()
     autoSell.Status = "Idle"
 end
 
--- ==========================================
--- PESTAÑA HOME (PRIMERA PESTAÑA)
--- ==========================================
+local function findEvoRemote()
+    local rEvents = RS:FindFirstChild("rEvents")
+    if rEvents then
+        for _, name in ipairs({"evolvePetEvent", "evolvePetRemote", "evoPetEvent", "evoPetRemote", "petEvolutionEvent", "evolvePet"}) do
+            local obj = rEvents:FindFirstChild(name)
+            if obj and (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) then
+                return obj, "rEvents." .. name
+            end
+        end
+        for _, obj in ipairs(rEvents:GetChildren()) do
+            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                local n = string.lower(obj.Name)
+                if (string.find(n, "evo") or string.find(n, "evolve")) and string.find(n, "pet") then
+                    return obj, "rEvents." .. obj.Name
+                end
+            end
+        end
+    end
+    local pkg = RS:FindFirstChild("packages")
+    local net = pkg and pkg:FindFirstChild("Net")
+    if net then
+        for _, obj in ipairs(net:GetChildren()) do
+            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+                local n = string.lower(obj.Name)
+                if (string.find(n, "evo") or string.find(n, "evolve")) and string.find(n, "pet") then
+                    return obj, "Net." .. obj.Name
+                end
+            end
+        end
+    end
+    return nil, nil
+end
+
+local function invokeEvoRemote(remote, petInstance, groupList)
+    if not remote or not petInstance or not petInstance.Parent then return false end
+    local ok = pcall(function()
+        if remote:IsA("RemoteFunction") then
+            local res = pcall(function() remote:InvokeServer("evolvePet", petInstance) end)
+            if not res then
+                pcall(function() remote:InvokeServer(petInstance) end)
+            end
+        else
+            local res = pcall(function() remote:FireServer("evolvePet", petInstance) end)
+            if not res then
+                pcall(function() remote:FireServer(petInstance) end)
+            end
+        end
+    end)
+    return ok
+end
+
+local function getEvoCandidatesFromProperty()
+    local candidates = {}
+    local grouped = {}
+
+    for _, pet in ipairs(getOwnedPets()) do
+        if autoEvo.SelectedPets[pet.Name] then
+            grouped[pet.Name] = grouped[pet.Name] or {}
+            table.insert(grouped[pet.Name], pet)
+        end
+    end
+
+    for _, listPets in pairs(grouped) do
+        local total = #listPets
+        local minKeep = autoEvo.KeepOneBase and 1 or 0
+        if total > minKeep then
+            for i = 1, (total - minKeep) do
+                table.insert(candidates, { pet = listPets[i], group = listPets })
+            end
+        end
+    end
+
+    return candidates
+end
+
+local function startAutoEvo()
+    if autoEvo.Enabled then return end
+    autoEvo.Enabled = true
+    autoEvo.Evolved = 0
+    autoEvo.LastEvo = 0
+    if autoEvo.Conn then task.cancel(autoEvo.Conn) end
+    autoEvo.Conn = task.spawn(function()
+        local remote, remoteName = findEvoRemote()
+        if not remote then
+            autoEvo.Status = "No evo remote found"
+            autoEvo.Enabled = false
+            return
+        end
+        autoEvo.Status = "Using " .. remoteName
+        while autoEvo.Enabled do
+            pcall(function()
+                local now = tick()
+                if now - autoEvo.LastEvo >= autoEvo.EvoInterval then
+                    local list = getEvoCandidatesFromProperty()
+                    if #list > 0 then
+                        for _, item in ipairs(list) do
+                            if not autoEvo.Enabled then break end
+                            if invokeEvoRemote(remote, item.pet, item.group) then
+                                autoEvo.Evolved = autoEvo.Evolved + 1
+                            end
+                            task.wait(0.08)
+                        end
+                        autoEvo.Status = "Total evo attempts: " .. autoEvo.Evolved
+                    else
+                        autoEvo.Status = "Waiting for owned pets to evo..."
+                    end
+                    autoEvo.LastEvo = tick()
+                end
+            end)
+            task.wait(0.15)
+        end
+    end)
+end
+
+local function stopAutoEvo()
+    autoEvo.Enabled = false
+    if autoEvo.Conn then
+        task.cancel(autoEvo.Conn)
+        autoEvo.Conn = nil
+    end
+    autoEvo.Status = "Idle"
+end
+
+local function getAlienPetsToSell()
+    local toSell = {}
+    local petsFolder = localPlayer:FindFirstChild("petsFolder")
+    if not petsFolder then return toSell end
+
+    local grouped = {}
+    for _, folder in ipairs(petsFolder:GetChildren()) do
+        if folder:IsA("Folder") and not string.find(string.lower(folder.Name), "aura") then
+            for _, pet in ipairs(folder:GetChildren()) do
+                if alienAutoSell.SelectedPets[pet.Name] then
+                    grouped[pet.Name] = grouped[pet.Name] or {}
+                    table.insert(grouped[pet.Name], pet)
+                end
+            end
+        end
+    end
+
+    for _, listPets in pairs(grouped) do
+        local total = #listPets
+        local sellCount = alienAutoSell.KeepOnePerType and math.max(0, total - 1) or total
+        for i = 1, sellCount do
+            table.insert(toSell, listPets[i])
+        end
+    end
+
+    return toSell
+end
+
+local function startAlienAutoSell()
+    if alienAutoSell.Enabled then return end
+    alienAutoSell.Enabled = true
+    alienAutoSell.Sold = 0
+    alienAutoSell.LastSell = 0
+    if alienAutoSell.Conn then task.cancel(alienAutoSell.Conn) end
+    alienAutoSell.Conn = task.spawn(function()
+        local remote, remoteName = findSellRemote()
+        if not remote then
+            alienAutoSell.Status = "No sell remote found"
+            alienAutoSell.Enabled = false
+            return
+        end
+        alienAutoSell.Status = "Using " .. remoteName
+        while alienAutoSell.Enabled do
+            pcall(function()
+                local now = tick()
+                if now - alienAutoSell.LastSell >= alienAutoSell.SellInterval then
+                    local pets = getAlienPetsToSell()
+                    if #pets > 0 then
+                        for _, pet in ipairs(pets) do
+                            if not alienAutoSell.Enabled then break end
+                            if sellPet(remote, pet) then
+                                alienAutoSell.Sold = alienAutoSell.Sold + 1
+                            end
+                            task.wait(0.03)
+                        end
+                        alienAutoSell.Status = "Total sold: " .. alienAutoSell.Sold
+                    else
+                        alienAutoSell.Status = "Waiting for Alien pets..."
+                    end
+                    alienAutoSell.LastSell = tick()
+                end
+            end)
+            task.wait(0.1)
+        end
+    end)
+end
+
+local function stopAlienAutoSell()
+    alienAutoSell.Enabled = false
+    if alienAutoSell.Conn then
+        task.cancel(alienAutoSell.Conn)
+        alienAutoSell.Conn = nil
+    end
+    alienAutoSell.Status = "Idle"
+end
+
 local homeTab = Window:Tab({ Title = "Home", Icon = "layout-dashboard" })
 
 local homePlayerSection = homeTab:Section({ Title = "Player", Icon = "user" })
@@ -795,9 +1067,6 @@ homeGameSection:Paragraph({
     Desc = "Name: Muscle Legends\nPlace ID: " .. tostring(game.PlaceId) .. "\nGame ID: " .. tostring(game.GameId)
 })
 
--- ==========================================
--- SPEED FARM
--- ==========================================
 local speedFarmTab = Window:Tab({ Title = "Speed Farm", Icon = "zap" })
 local speedSection = speedFarmTab:Section({ Title = "Farm & Funtions", Icon = "flame" })
 
@@ -1156,9 +1425,6 @@ toolsSection:Button({
     end
 })
 
--- ==========================================
--- PESTAÑA REBIRTHS (UNIFICADA Y COMPLETA)
--- ==========================================
 local rebirthsTab = Window:Tab({ Title = "Rebirths", Icon = "repeat" })
 local rbSectionPets = rebirthsTab:Section({ Title = "Rebirths Packs", Icon = "sparkles" })
 
@@ -1420,9 +1686,6 @@ rbSectionNormal:Toggle({
     end
 })
 
--- ==========================================
--- PESTAÑA DE ESTADÍSTICAS
--- ==========================================
 local statsTab = Window:Tab({ Title = "Estadisticas", Icon = "trending-up" })
 local statsSection = statsTab:Section({ Title = "Player Stats & Damage", Icon = "activity" })
 
@@ -1620,9 +1883,6 @@ task.spawn(function()
     end
 end)
 
--- ==========================================
--- ALIEN & PETS
--- ==========================================
 local tabAlien = Window:Tab({ Title = "Alien", Icon = "crosshair" })
 local alienAutoSection = tabAlien:Section({ Title = "Alien Automation", Icon = "bot", TextXAlignment = "Left" })
 
@@ -1639,6 +1899,46 @@ alienAutoSection:Toggle({
         end
     end
 })
+
+local alienSellSection = tabAlien:Section({ Title = "Auto Sell Alien Pets", Icon = "coins", TextXAlignment = "Left" })
+local alienSellStatusLbl = alienSellSection:Paragraph({ Title = "Alien Sell Status", Desc = "Idle" })
+
+for _, petName in ipairs(alienPetsSellList) do
+    alienSellSection:Toggle({
+        Title = "Sell " .. petName,
+        Default = false,
+        Callback = function(val)
+            alienAutoSell.SelectedPets[petName] = val
+        end
+    })
+end
+
+alienSellSection:Toggle({
+    Title = "Venta y deja 1 pet por tipo",
+    Default = false,
+    Callback = function(val)
+        alienAutoSell.KeepOnePerType = val
+    end
+})
+
+alienSellSection:Toggle({
+    Title = "Auto Sell Alien Pets",
+    Default = false,
+    Callback = function(val)
+        if val then
+            startAlienAutoSell()
+        else
+            stopAlienAutoSell()
+        end
+    end
+})
+
+task.spawn(function()
+    while true do
+        updatePara(alienSellStatusLbl, alienAutoSell.Status)
+        task.wait(0.5)
+    end
+end)
 
 local alienShopSection = tabAlien:Section({ Title = "Alien Shop", Icon = "shopping-bag", TextXAlignment = "Left" })
 
@@ -1657,7 +1957,7 @@ for _, item in ipairs(alienShopItems) do
 end
 
 alienShopSection:Toggle({
-    Title = "Enable Auto Buy Alien Shop",
+    Title = "Auto Buy Alien Shop",
     Default = false,
     Callback = function(val)
         state.AutoBuyAlienShop = val
@@ -1669,46 +1969,143 @@ alienShopSection:Toggle({
 
 local tabPets = Window:Tab({ Title = "Pets", Icon = "paw-print" })
 
-local petsSellSection = tabPets:Section({ Title = "Auto Sell Pets", Icon = "coins", TextXAlignment = "Left" })
-local petsStatusLbl = petsSellSection:Paragraph({ Title = "Status", Desc = "Idle" })
+local petsEvoSection = tabPets:Section({ Title = "Auto Evo", Icon = "sparkles", TextXAlignment = "Left" })
+local evoStatusLbl = petsEvoSection:Paragraph({ Title = "Evo Status", Desc = "Idle" })
+local selectedEvoPetName = ""
 
-petsSellSection:Toggle({
-    Title = "Sell UFO Bot",
-    Default = true,
-    Callback = function(val)
-        autoSell.TargetPets.UFOBot = val
+local evoPetDropdown = petsEvoSection:Dropdown({
+    Title = "Select Owned Pet to Evo",
+    Values = getOwnedPetNames(),
+    Default = "",
+    Callback = function(text)
+        if type(text) == "string" and text ~= "" then
+            selectedEvoPetName = text
+            autoEvo.SelectedPets[text] = true
+        end
     end
 })
 
-petsSellSection:Toggle({
-    Title = "Keep One UFO Bot",
+local function refreshOwnedPetsDropdowns()
+    local names = getOwnedPetNames()
+    pcall(function()
+        if evoPetDropdown then
+            if type(evoPetDropdown.Refresh) == "function" then
+                evoPetDropdown:Refresh(names)
+            elseif type(evoPetDropdown.SetValues) == "function" then
+                evoPetDropdown:SetValues(names)
+            end
+        end
+    end)
+    return names
+end
+
+petsEvoSection:Button({
+    Title = "Refresh Owned Pets",
+    Callback = function()
+        local names = refreshOwnedPetsDropdowns()
+        WindUI:Notify({ Title = "Pets", Content = "Pets en propiedad: " .. tostring(#names), Duration = 2 })
+    end
+})
+
+petsEvoSection:Toggle({
+    Title = "Keep 1 Pet Base",
     Default = false,
     Callback = function(val)
-        autoSell.KeepOneUFOBot = val
+        autoEvo.KeepOneBase = val
     end
 })
 
-petsSellSection:Toggle({
-    Title = "Sell Cosmic Invader",
-    Default = false,
-    Callback = function(val)
-        autoSell.TargetPets.CosmicInvader = val
-    end
-})
-
-petsSellSection:Toggle({
-    Title = "Sell Alien Slime",
-    Default = false,
-    Callback = function(val)
-        autoSell.TargetPets.AlienSlime = val
-    end
-})
-
-petsSellSection:Toggle({
-    Title = "Enable Auto Sell",
+petsEvoSection:Toggle({
+    Title = "Auto Evo",
     Default = false,
     Callback = function(val)
         if val then
+            if selectedEvoPetName == "" then
+                local names = refreshOwnedPetsDropdowns()
+                if #names > 0 then
+                    selectedEvoPetName = names[1]
+                    autoEvo.SelectedPets[names[1]] = true
+                end
+            end
+            startAutoEvo()
+        else
+            stopAutoEvo()
+        end
+    end
+})
+
+task.spawn(function()
+    while true do
+        updatePara(evoStatusLbl, autoEvo.Status)
+        task.wait(0.5)
+    end
+end)
+
+local petsSellSection = tabPets:Section({ Title = "Auto Sell", Icon = "coins", TextXAlignment = "Left" })
+local petsStatusLbl = petsSellSection:Paragraph({ Title = "Sell Status", Desc = "Idle" })
+local selectedSellPetName = ""
+
+local sellPetDropdown = petsSellSection:Dropdown({
+    Title = "Select Owned Pet to Sell",
+    Values = getOwnedPetNames(),
+    Default = "",
+    Callback = function(text)
+        if type(text) == "string" and text ~= "" then
+            selectedSellPetName = text
+            autoSell.SelectedPets[text] = true
+        end
+    end
+})
+
+local function refreshAllOwnedPetDropdowns()
+    local names = getOwnedPetNames()
+    pcall(function()
+        if evoPetDropdown then
+            if type(evoPetDropdown.Refresh) == "function" then
+                evoPetDropdown:Refresh(names)
+            elseif type(evoPetDropdown.SetValues) == "function" then
+                evoPetDropdown:SetValues(names)
+            end
+        end
+        if sellPetDropdown then
+            if type(sellPetDropdown.Refresh) == "function" then
+                sellPetDropdown:Refresh(names)
+            elseif type(sellPetDropdown.SetValues) == "function" then
+                sellPetDropdown:SetValues(names)
+            end
+        end
+    end)
+    return names
+end
+
+petsSellSection:Button({
+    Title = "Refresh Owned Pets",
+    Callback = function()
+        local names = refreshAllOwnedPetDropdowns()
+        WindUI:Notify({ Title = "Pets", Content = "Pets en propiedad: " .. tostring(#names), Duration = 2 })
+    end
+})
+
+petsSellSection:Toggle({
+    Title = "Keep One Pet Per Type",
+    Default = false,
+    Callback = function(val)
+        autoSell.KeepOnePerType = val
+    end
+})
+
+petsSellSection:Toggle({
+    Title = "Auto Sell",
+    Default = false,
+    Callback = function(val)
+        if val then
+            if selectedSellPetName == "" then
+                local names = refreshAllOwnedPetDropdowns()
+                if #names > 0 then
+                    selectedSellPetName = names[1]
+                    autoSell.SelectedPets[names[1]] = true
+                end
+            end
             startAutoSell()
         else
             stopAutoSell()
@@ -2023,9 +2420,6 @@ petsSection:Toggle({
     end
 })
 
--- ==========================================
--- BOSSES
--- ==========================================
 local bossesTab = Window:Tab({ Title = "Bosses", Icon = "crown" })
 local bossSectionMain = bossesTab:Section({ Title = "Boss Automation", Icon = "sword" })
 
@@ -2058,9 +2452,6 @@ for _, bossName in ipairs(REGULAR_BOSS_NAMES) do
     })
 end
 
--- ==========================================
--- PESTAÑA: BRAWL
--- ==========================================
 local brawlTab = Window:Tab({ Title = "Brawl", Icon = "swords" })
 local brawlSection = brawlTab:Section({ Title = "Controles de Brawl", Icon = "flame" })
 
@@ -2214,9 +2605,6 @@ task.spawn(function()
     end
 end)
 
--- ==========================================
--- KILLS
--- ==========================================
 local killsTab = Window:Tab({ Title = "Kills", Icon = "skull" })
 local killsSection = killsTab:Section({ Title = "Kill Contenido", Icon = "crosshair" })
 
@@ -2536,9 +2924,6 @@ killsSection:Toggle({
     end
 })
 
--- ==========================================
--- EMOTES
--- ==========================================
 local emotesTab = Window:Tab({ Title = "Emotes", Icon = "smile" })
 local emotesSection = emotesTab:Section({ Title = "Emotes", Icon = "sparkles" })
 
@@ -2552,9 +2937,6 @@ emotesSection:Button({
     end
 })
 
--- ==========================================
--- EXTRAS
--- ==========================================
 local extrasTab = Window:Tab({ Title = "Extras", Icon = "settings" })
 local extrasSection = extrasTab:Section({ Title = "Misc y Utilidades", Icon = "wrench" })
 
@@ -2770,9 +3152,6 @@ extrasSection:Dropdown({
     end
 })
 
--- ==========================================
--- UTILIDADES DE PERSONAJE (SIZE, VELOCIDAD, INFINITE JUMP)
--- ==========================================
 local charExtrasSection = extrasTab:Section({ Title = "Utilidades de Personaje", Icon = "user-plus" })
 
 local customSizeValue = 2
