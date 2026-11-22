@@ -30,7 +30,7 @@ Window:EditOpenButton({
     StrokeThickness = 2,
     Color = ColorSequence.new(
         Color3.fromHex("990000"),
-        Color3.fromHex("1A1A1A") 
+        Color3.fromHex("1A1A1A")
     ),
     OnlyMobile = false,
     Enabled = true,
@@ -491,7 +491,7 @@ local function stopAutoFarmBoss()
 end
 
 local function findAlienBoss()
-    local boss = workspace:FindFirstChild("Alien Boss")
+    local boss = workspaceService:FindFirstChild("Alien Boss")
     if boss and boss:IsA("Model") then
         local hpVal = boss:FindFirstChild("alienBossHealth", true)
         local hum = boss:FindFirstChildOfClass("Humanoid")
@@ -499,12 +499,12 @@ local function findAlienBoss()
         if hum and hum.Health <= 0 then return nil end
         return boss
     end
-    local globalHp = workspace:FindFirstChild("alienBossHealth", true)
+    local globalHp = workspaceService:FindFirstChild("alienBossHealth", true)
     if globalHp and globalHp:IsA("ValueBase") and globalHp.Value > 0 then
         local model = globalHp:FindFirstAncestorOfClass("Model")
         if model then return model end
     end
-    for _, obj in ipairs(workspace:GetDescendants()) do
+    for _, obj in ipairs(workspaceService:GetDescendants()) do
         if obj:IsA("Model") then
             local nameLower = string.lower(obj.Name)
             if (string.find(nameLower, "alien boss") or string.find(nameLower, "alienboss")) and not string.find(nameLower, "arena") then
@@ -525,9 +525,9 @@ local function claimAlienChest()
     local char = getCharacter()
     local root = getRoot()
     if not char or not root then return end
-    local chest = workspace:FindFirstChild("Alien Chest", true)
+    local chest = workspaceService:FindFirstChild("Alien Chest", true)
     if not chest then
-        for _, obj in pairs(workspace:GetDescendants()) do
+        for _, obj in pairs(workspaceService:GetDescendants()) do
             if (obj:IsA("Model") or obj:IsA("BasePart")) and string.find(string.lower(obj.Name), "chest") then
                 chest = obj
                 break
@@ -1520,41 +1520,6 @@ local function equipSpecificPets(petList, limit)
     end
 end
 
-local function equipRebirthPets(limit)
-    local petsFolder = localPlayer:FindFirstChild("petsFolder")
-    if not petsFolder then return 0 end
-    local count = 0
-    for _, petName in ipairs(eclipsePets) do
-        for _, folder in pairs(petsFolder:GetChildren()) do
-            if folder:IsA("Folder") then
-                for _, pet in pairs(folder:GetChildren()) do
-                    if pet.Name == petName then
-                        replicatedStorage.rEvents.equipPetEvent:FireServer("equipPet", pet)
-                        count = count + 1
-                        if count >= limit then return count end
-                    end
-                end
-            end
-        end
-    end
-    if count == 0 then
-        for _, petName in ipairs(bestPets) do
-            for _, folder in pairs(petsFolder:GetChildren()) do
-                if folder:IsA("Folder") then
-                    for _, pet in pairs(folder:GetChildren()) do
-                        if pet.Name == petName then
-                            replicatedStorage.rEvents.equipPetEvent:FireServer("equipPet", pet)
-                            count = count + 1
-                            if count >= limit then return count end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return count
-end
-
 getgenv().AutoFarming = false
 
 task.spawn(function()
@@ -1667,7 +1632,7 @@ task.spawn(function()
 
                     if not getgenv().AutoFarmingRepPets then break end
                     unequipAllPets()
-                    equipRebirthPets(12)
+                    equipSpecificPets(eclipsePets, 12)
 
                     local currentRb = getStats().Reb
                     repeat
@@ -2493,9 +2458,9 @@ petsSection:Toggle({
             print("Auto buy pet started for: " .. petName .. " from " .. crystal) 
             task.spawn(function() 
                 while _G.AutoBuyPet and selectedPet ~= "" do 
-                    local petToBuy = ReplicatedStorage.cPetShopFolder:FindFirstChild(petName) 
+                    local petToBuy = replicatedStorage.cPetShopFolder:FindFirstChild(petName) 
                     if petToBuy then 
-                        ReplicatedStorage.cPetShopRemote:InvokeServer(petToBuy) 
+                        replicatedStorage.cPetShopRemote:InvokeServer(petToBuy) 
                         print("Bought pet: " .. petName) 
                     else 
                         print("Pet not found: " .. petName) 
@@ -2531,9 +2496,9 @@ petsSection:Toggle({
             print("Auto buy aura started for: " .. auraName .. " from " .. crystal) 
             task.spawn(function() 
                 while _G.AutoBuyAura and selectedAura ~= "" do 
-                    local auraToBuy = ReplicatedStorage.cPetShopFolder:FindFirstChild(auraName) 
+                    local auraToBuy = replicatedStorage.cPetShopFolder:FindFirstChild(auraName) 
                     if auraToBuy then 
-                        ReplicatedStorage.cPetShopRemote:InvokeServer(auraToBuy) 
+                        replicatedStorage.cPetShopRemote:InvokeServer(auraToBuy) 
                         print("Bought aura: " .. auraName) 
                     else 
                         print("Aura not found: " .. auraName) 
@@ -2630,61 +2595,67 @@ local function getBrawlTarget()
     return nil
 end
 
-replicatedStorage.rEvents.brawlEvent.OnClientEvent:Connect(function(action)
-    if action == "brawlStarting" then
-        if getgenv().AutoJoinBrawl and not inBrawlSession then
-            inBrawlSession = true
+pcall(function()
+    local rEvents = replicatedStorage:FindFirstChild("rEvents")
+    local brawlEvent = rEvents and rEvents:FindFirstChild("brawlEvent")
+    if brawlEvent and brawlEvent:IsA("RemoteEvent") then
+        brawlEvent.OnClientEvent:Connect(function(action)
+            if action == "brawlStarting" then
+                if getgenv().AutoJoinBrawl and not inBrawlSession then
+                    inBrawlSession = true
 
-            local char = localPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+                    local char = localPlayer.Character
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                    local humanoid = char and char:FindFirstChildOfClass("Humanoid")
 
-            if hrp then
-                previousState.SavedPosition = hrp.CFrame
-            end
+                    if hrp then
+                        previousState.SavedPosition = hrp.CFrame
+                    end
 
-            previousState.ActiveToolName = nil
-            if char then
-                for _, item in ipairs(char:GetChildren()) do
-                    if item:IsA("Tool") then
-                        previousState.ActiveToolName = item.Name
-                        item.Parent = localPlayer:FindFirstChild("Backpack")
-                        break
+                    previousState.ActiveToolName = nil
+                    if char then
+                        for _, item in ipairs(char:GetChildren()) do
+                            if item:IsA("Tool") then
+                                previousState.ActiveToolName = item.Name
+                                item.Parent = localPlayer:FindFirstChild("Backpack")
+                                break
+                            end
+                        end
+                    end
+
+                    if humanoid then
+                        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                    end
+
+                    pcall(function()
+                        brawlEvent:FireServer("joinBrawl")
+                    end)
+                end
+
+            elseif action == "endBrawl" and inBrawlSession then
+                task.wait(1.5)
+                local char = localPlayer.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                
+                if hrp and previousState.SavedPosition then
+                    hrp.CFrame = previousState.SavedPosition
+                    hrp.AssemblyLinearVelocity = Vector3.zero
+                end
+
+                task.wait(0.3)
+
+                if previousState.ActiveToolName then
+                    local backpack = localPlayer:FindFirstChild("Backpack")
+                    local tool = backpack and backpack:FindFirstChild(previousState.ActiveToolName)
+                    local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+                    if tool and humanoid then
+                        humanoid:EquipTool(tool)
                     end
                 end
+
+                inBrawlSession = false
             end
-
-            if humanoid then
-                humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-            end
-
-            pcall(function()
-                replicatedStorage.rEvents.brawlEvent:FireServer("joinBrawl")
-            end)
-        end
-
-    elseif action == "endBrawl" and inBrawlSession then
-        task.wait(1.5)
-        local char = localPlayer.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        
-        if hrp and previousState.SavedPosition then
-            hrp.CFrame = previousState.SavedPosition
-            hrp.AssemblyLinearVelocity = Vector3.zero
-        end
-
-        task.wait(0.3)
-
-        if previousState.ActiveToolName then
-            local backpack = localPlayer:FindFirstChild("Backpack")
-            local tool = backpack and backpack:FindFirstChild(previousState.ActiveToolName)
-            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-            if tool and humanoid then
-                humanoid:EquipTool(tool)
-            end
-        end
-
-        inBrawlSession = false
+        end)
     end
 end)
 
@@ -3033,7 +3004,7 @@ killsSection:Toggle({
     Callback = function(p28)
         v44 = p28
         if not v44 then
-            workspace.CurrentCamera.CameraSubject = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid") or localPlayer
+            workspaceService.CurrentCamera.CameraSubject = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid") or localPlayer
             return
         end
         task.spawn(function()
@@ -3042,7 +3013,7 @@ killsSection:Toggle({
                 if findFirstChild7 and findFirstChild7 ~= localPlayer then
                     local humanoid8 = findFirstChild7.Character and findFirstChild7.Character:FindFirstChildOfClass("Humanoid")
                     if humanoid8 then
-                        workspace.CurrentCamera.CameraSubject = humanoid8
+                        workspaceService.CurrentCamera.CameraSubject = humanoid8
                     end
                 end
                 task.wait(0.1)
@@ -3590,3 +3561,41 @@ extrasPerfSection:Button({
     Callback = function()
     end
 })
+
+pcall(function()
+    local newTab = Window:Tab({ Title = "Nuevas Funciones", Icon = "sparkles" })
+    local newSection = newTab:Section({ Title = "Utilidades Extra", Icon = "zap" })
+
+    local autoClaimChestsActive = false
+    newSection:Toggle({
+        Title = "Auto Claim Chests",
+        Default = false,
+        Callback = function(state)
+            autoClaimChestsActive = state
+            if state then
+                task.spawn(function()
+                    while autoClaimChestsActive do
+                        pcall(function()
+                            if type(claimAlienChest) == "function" then
+                                claimAlienChest()
+                            end
+                        end)
+                        task.wait(2)
+                    end
+                end)
+            end
+        end
+    })
+
+    newSection:Button({
+        Title = "Reset Character",
+        Callback = function()
+            pcall(function()
+                local hum = localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    hum.Health = 0
+                end
+            end)
+        end
+    })
+end)
