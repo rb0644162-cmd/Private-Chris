@@ -1,0 +1,2486 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local WorkspaceService = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local VirtualUser = game:GetService("VirtualUser")
+local TeleportService = game:GetService("TeleportService")
+local StatsService = game:GetService("Stats")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local RS = ReplicatedStorage
+local autoRejoin = true
+local autoExecute = true
+getgenv()._ERDN_QueuedForNextServer = false
+getgenv().RealDurability = 0
+local function setRealDurability(value)
+    if type(value) == "number" and value >= 0 then
+        getgenv().RealDurability = value
+    end
+end
+local LOADER_URL = "https://raw.githubusercontent.com/R1qvex/ERDN-PRIVATE-SCRIPT/refs/heads/main/R1qvex"
+local function getQueueOnTeleport()
+    return queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
+end
+local function queueReloadOnTeleport()
+    if not autoExecute then
+        return
+    end
+    local _s = getQueueOnTeleport()
+    if not _s then
+        return
+    end
+    if getgenv()._ERDN_QueuedForNextServer then
+        return
+    end
+    getgenv()._ERDN_QueuedForNextServer = true
+    pcall(function()
+        _s("loadstring(game:HttpGet(\"" .. LOADER_URL .. "\"))()")
+    end)
+    task.delay(5, function()
+        getgenv()._ERDN_QueuedForNextServer = false
+    end)
+end
+local ignoredInstances = setmetatable({}, {__mode = "k"})
+local guiParent = (function()
+    local _u, _v = pcall(function()
+        return gethui()
+    end)
+    if _u and _v then
+        return _v
+    end
+    local _w, _x = pcall(function()
+        return get_hidden_gui()
+    end)
+    if _w and _x then
+        return _x
+    end
+    local _y, _z = pcall(function()
+        return game:GetService("CoreGui")
+    end)
+    if _y and _z then
+        local _B = pcall(function()
+            local _A = Instance.new("Folder")
+            _A.Parent = _z
+            _A:Destroy()
+        end)
+        if _B then
+            return _z
+        end
+    end
+    return LocalPlayer:WaitForChild("PlayerGui")
+end)()
+local function randomString(_E)
+    local _F = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    local _H = _E or ""
+    for _I = 1, 8 do
+        local _J = math.random(1, #_F)
+        _H = _H .. _F:sub(_J, _J)
+    end
+    return _H
+end
+local function jitter(_L, _M)
+    _L = _L or 0.01
+    _M = _M or 0.005
+    return _L + (math.random() * _M * 2 - _M)
+end
+task.spawn(function()
+    while true do
+        task.wait(math.random(25, 70))
+        pcall(function()
+            local _N = workspace.CurrentCamera
+            if not _N then
+                return
+            end
+            local _O = _N.ViewportSize
+            local _P = _O.X / 2 + math.random(-200, 200)
+            local _Q = _O.Y / 2 + math.random(-200, 200)
+            VirtualInputManager:SendMouseMoveEvent(_P, _Q, game)
+        end)
+    end
+end)
+pcall(function()
+    local _R = getrawmetatable(game)
+    setreadonly(_R, false)
+    local _S = _R.__namecall
+    _R.__namecall = newcclosure(function(_T, ...)
+        local _U = getnamecallmethod()
+        if _U == "Kick" and _T == LocalPlayer then
+            return
+        end
+        if _U == "Shutdown" and _T == game then
+            return
+        end
+        if (_U == "Destroy" or _U == "ClearAllChildren" or _U == "Remove") then
+            if ignoredInstances[_T] then
+                return
+            end
+        end
+        if _U == "Teleport" or _U == "TeleportAsync" or _U == "TeleportToPlaceInstance" then
+            queueReloadOnTeleport()
+        end
+        if (_U == "FireServer" or _U == "InvokeServer") and _T.Name == "updateStats" then
+            local _V = {...}
+            if _V[1] == true and type(_V[3]) == "number" then
+                setRealDurability(_V[3])
+            end
+        end
+        if (_U == "FireServer" or _U == "InvokeServer") then
+            local _W = string.lower(_T.Name)
+            if string.find(_W, "crystal") or string.find(_W, "open") or string.find(_W, "egg") or string.find(_W, "unbox") then
+                getgenv().CapturedCrystalRemote = _T
+                getgenv().CapturedCrystalArgs = {...}
+            end
+        end
+        return _S(_T, ...)
+    end)
+    setreadonly(_R, true)
+    pcall(function()
+        LocalPlayer.Kick = function()
+        end
+    end)
+end)
+LocalPlayer.Idled:Connect(function()
+    pcall(function()
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end)
+end)
+task.spawn(function()
+    local function trackDurabilityValue(_Y)
+        if _Y:IsA("NumberValue") or _Y:IsA("IntValue") then
+            local _Z = string.lower(_Y.Name)
+            if _Z == "durability" or _Z == "defense" then
+                setRealDurability(_Y.Value)
+                _Y:GetPropertyChangedSignal("Value"):Connect(function()
+                    setRealDurability(_Y.Value)
+                end)
+            end
+        end
+    end
+    local function watchContainer(_bb)
+        if not _bb then
+            return
+        end
+        for _bc, _bd in ipairs(_bb:GetDescendants()) do
+            trackDurabilityValue(_bd)
+        end
+        _bb.DescendantAdded:Connect(function(_be)
+            trackDurabilityValue(_be)
+        end)
+    end
+    watchContainer(LocalPlayer:FindFirstChild("leaderstats"))
+    watchContainer(LocalPlayer)
+    LocalPlayer.CharacterAdded:Connect(function(_bf)
+        watchContainer(_bf)
+    end)
+end)
+local function setupAutoRejoin()
+    local _bh = game.PlaceId
+    pcall(function()
+        local _bi = game:GetService("CoreGui").RobloxPromptGui.promptOverlay
+        if _bi then
+            _bi.DescendantAdded:Connect(function(_bj)
+                if not autoRejoin then
+                    return
+                end
+                if _bj.Name == "ErrorPrompt" or _bj.Name == "ErrorTitle" or _bj:FindFirstChild("ErrorTitle") then
+                    task.wait(1)
+                    pcall(function()
+                        TeleportService:Teleport(_bh, LocalPlayer)
+                    end)
+                end
+            end)
+        end
+    end)
+    pcall(function()
+        TeleportService.TeleportInitFailed:Connect(function(_bk, _bl, _bm)
+            if _bk == LocalPlayer and autoRejoin then
+                task.wait(2)
+                pcall(function()
+                    TeleportService:Teleport(_bh, LocalPlayer)
+                end)
+            end
+        end)
+    end)
+end
+setupAutoRejoin()
+local MAX_PETS_EQUIPPED = 12
+local MAX_REP_SPEED = 100
+local MAX_PING = 1100
+local REP_PET = "Swift Samurai"
+local PROTEIN_EGG = "ProteinEgg"
+local EGG_INTERVAL = 30 * 60
+local REP_DELAY = 0.01
+local repsPerBatch = 1000
+getgenv()._AutoRepFarmEnabled = false
+local petStats = {
+    ["Omega Overlord"] = {repSpeed = 20, strength = 0, durability = 0, rebirth = 0},
+    ["Swift Samurai"] = {repSpeed = 15, strength = 0, durability = 0, rebirth = 0},
+    ["Titanium Hydra"] = {repSpeed = 0, strength = 0, durability = 0, rebirth = 2},
+    ["Tribal Overlord"] = {repSpeed = 0, strength = 0, durability = 0, rebirth = 2},
+    ["Common Boss Pet"] = {repSpeed = 5, strength = 0, durability = 0, rebirth = 0},
+    ["Rare Boss Pet"] = {repSpeed = 7, strength = 0, durability = 0, rebirth = 0},
+    ["Epic Boss Pet"] = {repSpeed = 10, strength = 0, durability = 0, rebirth = 0},
+    ["Rainbow Boss Pet"] = {repSpeed = 10, strength = 7, durability = 0, rebirth = 0},
+    ["Legendary Boss Pet"] = {repSpeed = 10, strength = 10, durability = 0, rebirth = 0},
+    ["Mythic Boss Pet"] = {repSpeed = 10, strength = 20, durability = 0, rebirth = 0},
+    ["Inferno Drake"] = {repSpeed = 40, strength = 0, durability = 0, rebirth = 0},
+}
+local state = {
+    FastRep = false,
+    AutoRebirth = false,
+    AutoFarmBoss = false,
+    AutoPunch = false,
+    KillAura = false,
+    AntiAFK = false,
+    FPSBoost = false,
+    CurrentBoss = "None",
+    BossHealth = "N/A",
+    AutoCrystal = false,
+    AutoGym = false,
+    AutoFarmAlienBoss = false,
+    AutoAlienMachines = false,
+    AutoBuyAlienShop = false
+}
+local autoSell = {
+    Enabled = false,
+    Conn = nil,
+    SellInterval = 0.3,
+    LastSell = 0,
+    Status = "Idle",
+    Sold = 0,
+    TargetPets = {UFOBot = true, CosmicInvader = false, AlienSlime = false,},
+    KeepOneUFOBot = false,
+}
+local rebirthComboOn = false
+local rebirthChaosOn = false
+local rebirthTitansOn = false
+local bossIds = {"Boss1", "Boss2", "Boss3", "Boss4", "Boss5", "RainbowBoss"}
+local bossNames = {
+    ["Boss1"] = "Common Boss",
+    ["Boss2"] = "Rare Boss",
+    ["Boss3"] = "Epic Boss",
+    ["Boss4"] = "Legendary Boss",
+    ["Boss5"] = "Mythical Boss",
+    ["RainbowBoss"] = "Rainbow Boss"
+}
+local selectedBosses = {}
+for _bE, _bF in ipairs(bossIds) do
+    selectedBosses[_bF] = true
+end
+local alienShopItems = {
+    {Name = "Lunar Slug", Key = "LunarSlug", Price = 2400},
+    {Name = "UFO Axolotl", Key = "UFOAxolotl", Price = 4800},
+    {Name = "Alien Serum", Key = "AlienSerum", Price = 3000},
+    {Name = "Plasma Dumbbell", Key = "PlasmaDumbbell", Price = 200},
+    {Name = "Alien Bar", Key = "AlienBar", Price = 250},
+    {Name = "Alien Pull-Up Bar", Key = "AlienPullUpBar", Price = 300},
+    {Name = "Alien Treadmill", Key = "AlienTreadmill", Price = 350}
+}
+local selectedShopItems = {}
+local tracker = {
+    TotalStr = 0,
+    TotalDur = 0,
+    TotalReb = 0,
+    LastStr = 0,
+    LastReb = 0,
+    FastRepStartTime = 0,
+    RebStartTime = 0,
+    SnapStr = 0,
+    SnapDur = 0,
+    SnapTime = 0,
+    SnapReb = 0,
+    RebSnapTime = 0,
+    LastDur = nil,
+    DurSource = nil,
+    DurSession = nil
+}
+local arenaCache = {Arena = nil, LastCheck = 0}
+local colors = {goldAccent = Color3.fromRGB(255, 215, 0), goldDark = Color3.fromRGB(180, 140, 0),}
+local function getCharacter()
+    return LocalPlayer.Character
+end
+local function getRoot()
+    local _bN = getCharacter()
+    return _bN and _bN:FindFirstChild("HumanoidRootPart")
+end
+local function formatNumber(_bP)
+    if not _bP or _bP == 0 or _bP ~= _bP or _bP == math.huge or _bP == -math.huge then
+        return "0"
+    end
+    local _bQ = {"", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc"}
+    local _bR = math.floor(math.log(_bP, 1000))
+    if _bR < 1 then
+        return tostring(math.floor(_bP))
+    end
+    local _bS = _bP / math.pow(1000, _bR)
+    return string.format("%.2f%s", _bS, _bQ[_bR + 1] or "")
+end
+local function formatDuration(_bU)
+    return string.format("%02dd %02dh %02dm %02ds", math.floor(_bU / 86400), math.floor((_bU % 86400) / 3600), math.floor((_bU % 3600) / 60), math.floor(_bU % 60))
+end
+local function formatRates(_bW)
+    return "Per second: " .. formatNumber(_bW) .. "\nPer minute: " .. formatNumber(_bW * 60) .. "\nPer hour: " .. formatNumber(_bW * 3600) .. "\nPer day: " .. formatNumber(_bW * 86400) .. "\nPer week: " .. formatNumber(_bW * 604800)
+end function updatePara(_bX, _bY)
+    if not _bX then
+        return
+    end
+    pcall(function()
+        if type(_bX.SetDesc) == "function" then
+            _bX:SetDesc(tostring(_bY))
+            return
+        end
+        if _bX.Desc and type(_bX.Desc) == "userdata" and _bX.Desc.Text ~= nil then
+            _bX.Desc.Text = tostring(_bY)
+            return
+        end
+        if _bX.TextLabel and _bX.TextLabel.Text ~= nil then
+            _bX.TextLabel.Text = tostring(_bY)
+        end
+    end)
+end
+local durabilityValue = nil
+local function getDurability()
+    if not (durabilityValue and durabilityValue.Parent) then
+        durabilityValue = nil
+        local _cb = LocalPlayer:FindFirstChild("leaderstats")
+        local _cc = {LocalPlayer}
+        if _cb then
+            table.insert(_cc, _cb)
+        end
+        for _cd, _ce in ipairs({"Durability", "Defense"}) do
+            for _cf, _cg in ipairs(_cc) do
+                local _ch = _cg:FindFirstChild(_ce)
+                if _ch and _ch:IsA("ValueBase") and type(_ch.Value) == "number" then
+                    durabilityValue = _ch
+                    break
+                end
+            end
+            if durabilityValue then
+                break
+            end
+        end
+    end
+    if durabilityValue then
+        return durabilityValue.Value, durabilityValue
+    end
+    local _ci = getgenv().RealDurability or 0
+    if _ci > 0 then
+        return _ci, "hook"
+    end
+    return 0, nil
+end
+local function getStats()
+    local _ck = {Str = 0, Dur = 0, Reb = 0, DurSource = nil}
+    local _cl = LocalPlayer:FindFirstChild("leaderstats")
+    if _cl then
+        local _cm = _cl:FindFirstChild("Strength") or _cl:FindFirstChild("Power")
+        local _cn = _cl:FindFirstChild("Rebirths")
+        if _cm then
+            _ck.Str = _cm.Value
+        end
+        if _cn then
+            _ck.Reb = _cn.Value
+        end
+    end
+    _ck.Dur, _ck.DurSource = getDurability()
+    return _ck
+end
+local function getPing()
+    local _cp, _cq = pcall(function()
+        return StatsService.Network.ServerStatsItem["Data Ping"]:GetValue()
+    end)
+    return _cp and _cq or 999
+end
+local function equipRepPet()
+    local _cs = LocalPlayer:FindFirstChild("petsFolder")
+    if _cs and _cs:FindFirstChild("Unique") then
+        for _ct, _cu in pairs(_cs.Unique:GetChildren()) do
+            if _cu.Name == REP_PET then
+                local _cv = RS:FindFirstChild("rEvents")
+                if _cv and _cv:FindFirstChild("equipPetEvent") then
+                    _cv.equipPetEvent:FireServer("equipPet", _cu)
+                end
+                break
+            end
+        end
+    end
+end
+local function eatProteinEgg()
+    if LocalPlayer:FindFirstChild("Backpack") then
+        for _cx, _cy in pairs(LocalPlayer.Backpack:GetChildren()) do
+            if _cy.Name == PROTEIN_EGG then
+                local _cz = RS:FindFirstChild("rEvents")
+                if _cz and _cz:FindFirstChild("eatEvent") then
+                    _cz.eatEvent:FireServer("eat", _cy)
+                end
+                break
+            end
+        end
+    end
+end
+if not getgenv()._AutoRepFarmLoop then
+    getgenv()._AutoRepFarmLoop = true
+    task.spawn(function()
+        equipRepPet()
+        local _cA = tick()
+        while true do
+            if getgenv()._AutoRepFarmEnabled then
+                local _cB = getPing()
+                if _cB > MAX_PING then
+                    task.wait(5)
+                else
+                    if LocalPlayer:FindFirstChild("muscleEvent") then
+                        for _cC = 1, repsPerBatch do
+                            if not getgenv()._AutoRepFarmEnabled then
+                                break
+                            end
+                            pcall(function()
+                                LocalPlayer.muscleEvent:FireServer("rep")
+                            end)
+                        end
+                    end
+                    if tick() - _cA >= EGG_INTERVAL then
+                        eatProteinEgg()
+                        _cA = tick()
+                    end
+                    task.wait(REP_DELAY)
+                end
+            else
+                task.wait(0.5)
+            end
+        end
+    end)
+end
+local function equipPets(_cE, _cF)
+    local _cG = RS:FindFirstChild("rEvents")
+    local _cH = _cG and _cG:FindFirstChild("equipPetEvent")
+    if not _cH then
+        return false
+    end
+    local _cI = LocalPlayer:FindFirstChild("petsFolder")
+    if _cI then
+        for _cJ, _cK in ipairs(_cI:GetChildren()) do
+            if _cK:IsA("Folder") then
+                for _cL, _cM in ipairs(_cK:GetChildren()) do
+                    if _cF and not _cF() then
+                        return false
+                    end
+                    _cH:FireServer("unequipPet", _cM)
+                end
+            end
+        end
+    end
+    task.wait(0.05)
+    for _cN, _cO in ipairs(_cE) do
+        if _cF and not _cF() then
+            return false
+        end
+        _cH:FireServer("equipPet", _cO)
+    end
+    return not _cF or _cF()
+end
+local function getOwnedPets()
+    local _cQ = {}
+    local _cR = LocalPlayer:FindFirstChild("petsFolder")
+    if not _cR then
+        return _cQ
+    end
+    for _cS, _cT in ipairs(_cR:GetChildren()) do
+        if _cT:IsA("Folder") then
+            for _cU, _cV in ipairs(_cT:GetChildren()) do
+                local _cW = petStats[_cV.Name]
+                if _cW then
+                    table.insert(_cQ, {
+                        instance = _cV,
+                        name = _cV.Name,
+                        repSpeed = _cW.repSpeed or 0,
+                        strength = _cW.strength or 0,
+                        durability = _cW.durability or 0,
+                        rebirth = _cW.rebirth or 0
+                    })
+                end
+            end
+        end
+    end
+    return _cQ
+end
+local function equipBestRepPets(_cY)
+    if _cY and not _cY() then
+        return
+    end
+    local _cZ = getOwnedPets()
+    local _da, _db = {}, {}
+    local _dc, _dd = 0, 0
+    table.sort(_cZ, function(_de, _df)
+        return _de.repSpeed > _df.repSpeed
+    end)
+    for _dg, _dh in ipairs(_cZ) do
+        if _dc >= MAX_PETS_EQUIPPED or _dd >= MAX_REP_SPEED then
+            break
+        end
+        if _dh.repSpeed > 0 then
+            table.insert(_da, _dh.instance)
+            _db[_dh.instance] = true
+            _dc = _dc + 1
+            _dd = _dd + _dh.repSpeed
+        end
+    end
+    local _di = {}
+    for _dj, _dk in ipairs(_cZ) do
+        if not _db[_dk.instance] then
+            table.insert(_di, _dk)
+        end
+    end
+    table.sort(_di, function(_dl, _dm)
+        return (_dl.strength + _dl.durability) > (_dm.strength + _dm.durability)
+    end)
+    for _dn, _do in ipairs(_di) do
+        if _dc >= MAX_PETS_EQUIPPED then
+            break
+        end
+        if _do.strength > 0 or _do.durability > 0 then
+            table.insert(_da, _do.instance)
+            _dc = _dc + 1
+        end
+    end
+    equipPets(_da, _cY)
+end
+local function equipRepSet(_dq, _dr)
+    if _dr and not _dr() then
+        return
+    end
+    local _ds = getOwnedPets()
+    local _dt, _du = {}, 0
+    for _dv, _dw in ipairs(_ds) do
+        if _du >= MAX_PETS_EQUIPPED then
+            break
+        end
+        if _dw.name == _dq then
+            table.insert(_dt, _dw.instance)
+            _du = _du + 1
+        end
+    end
+    if _du == 0 then
+        for _dx, _dy in ipairs(_ds) do
+            if _du >= MAX_PETS_EQUIPPED then
+                break
+            end
+            table.insert(_dt, _dy.instance)
+            _du = _du + 1
+        end
+    end
+    equipPets(_dt, _dr)
+end
+local function equipRebirthSet(_dA, _dB)
+    if _dB and not _dB() then
+        return
+    end
+    local _dC = getOwnedPets()
+    local _dD, _dE = {}, 0
+    for _dF, _dG in ipairs(_dC) do
+        if _dE >= MAX_PETS_EQUIPPED then
+            break
+        end
+        if _dG.name == _dA then
+            table.insert(_dD, _dG.instance)
+            _dE = _dE + 1
+        end
+    end
+    if _dE == 0 then
+        for _dH, _dI in ipairs(_dC) do
+            if _dE >= MAX_PETS_EQUIPPED then
+                break
+            end
+            table.insert(_dD, _dI.instance)
+            _dE = _dE + 1
+        end
+    end
+    equipPets(_dD, _dB)
+end
+local function equipBestRebirthPets(_dK)
+    if _dK and not _dK() then
+        return
+    end
+    local _dL = getOwnedPets()
+    local _dM = {}
+    table.sort(_dL, function(_dN, _dO)
+        return _dN.rebirth > _dO.rebirth
+    end)
+    local _dP = 0
+    for _dQ, _dR in ipairs(_dL) do
+        if _dP >= MAX_PETS_EQUIPPED then
+            break
+        end
+        if _dR.rebirth > 0 then
+            table.insert(_dM, _dR.instance)
+            _dP = _dP + 1
+        end
+    end
+    equipPets(_dM, _dK)
+end
+local function sendReps(_dT, _dU, _dV, _dW)
+    local _dX = os.clock()
+    local _dY = math.clamp(_dX - (_dT.LastAt or _dX), 0, 0.1)
+    _dT.LastAt = _dX
+    _dT.Tokens = math.min(_dV, (_dT.Tokens or 0) + _dU * _dY)
+    local _dZ = 0
+    local _ea = LocalPlayer:FindFirstChild("muscleEvent")
+    while _dT.Tokens >= 1 and _dW() and _ea do
+        _ea:FireServer("rep")
+        _dT.Tokens = _dT.Tokens - 1
+        _dZ = _dZ + 1
+    end
+    return _dZ
+end
+local function runRebirthMode(_ec, _ed, _ee, _ef, _eg)
+    local _eh = {TargetSeconds = 3, MaxRate = 50, SendRate = 50, StrengthPerRep = nil}
+    local function _ei(_ej)
+        return _ec() and _ed() == _ej
+    end
+    local function _ek(_el)
+        local _em = os.clock()
+        if _em - _el.SampleAt < 0.25 then
+            return
+        end
+        local _en = getStats()
+        local _eo = _en.Str - _el.StartStrength
+        if _eo > 0 and _el.Sent > 0 then
+            _eh.StrengthPerRep = _eo / _el.Sent
+            local _ep = math.max(0, _el.Target - _en.Str)
+            local _eq = math.max(0.1, _eh.TargetSeconds - _el.TrainingSeconds)
+            _eh.SendRate = math.clamp(_ep / _eh.StrengthPerRep / _eq, 1, _eh.MaxRate)
+        elseif _el.TrainingSeconds >= _eh.TargetSeconds then
+            _eh.SendRate = _eh.MaxRate
+        end
+        _el.SampleAt = _em
+    end
+    local function _er(_es)
+        local _et = getStats()
+        local _eu = {
+            Target = 5000 + _et.Reb * 2550,
+            Rebirths = _et.Reb,
+            SampleAt = os.clock(),
+            StartStrength = _et.Str,
+            Sent = 0,
+            Tokens = 0,
+            LastAt = os.clock(),
+            TrainingSeconds = 0
+        }
+        _eh.SendRate = _eh.StrengthPerRep and math.clamp(math.max(0, _eu.Target - _eu.StartStrength) / _eh.StrengthPerRep / _eh.TargetSeconds, 1, _eh.MaxRate) or _eh.MaxRate
+        local _ev = os.clock()
+        local function _ew()
+            local _ex = getStats()
+            return _ei(_es) and _ex.Reb == _eu.Rebirths and _ex.Str < _eu.Target
+        end
+        while _ew() do
+            local _ey = os.clock()
+            local _ez = LocalPlayer.Character
+            local _eA = _ez and _ez:FindFirstChildOfClass("Humanoid")
+            if _eA and _eA.Health > 0 then
+                _eu.TrainingSeconds = _eu.TrainingSeconds + math.max(0, _ey - _ev)
+                _ek(_eu)
+                _eu.Sent = _eu.Sent + sendReps(_eu, _eh.SendRate, 5, _ew)
+            else
+                _eu.Tokens = 0
+                _eu.LastAt = _ey
+            end
+            _ev = _ey
+            RunService.Heartbeat:Wait()
+        end
+        if not _ei(_es) or getStats().Reb ~= _eu.Rebirths then
+            return
+        end
+        _eg(function()
+            return _ei(_es)
+        end)
+        local _eB = RS:FindFirstChild("rEvents")
+        local _eC = _eB and _eB:FindFirstChild("rebirthRemote")
+        while _ei(_es) and getStats().Reb == _eu.Rebirths do
+            if _eC then
+                pcall(function()
+                    if _eC:IsA("RemoteFunction") then
+                        _eC:InvokeServer("rebirthRequest")
+                    elseif _eC:IsA("RemoteEvent") then
+                        _eC:FireServer("rebirthRequest")
+                    end
+                end)
+            end
+            task.wait(0.05)
+        end
+    end
+    _ee(_ed() + 1)
+    local _eD = _ed()
+    task.spawn(function()
+        pcall(function()
+            while _ei(_eD) do
+                _ef(function()
+                    return _ei(_eD)
+                end)
+                if not _ei(_eD) then
+                    break
+                end
+                _er(_eD)
+                task.wait(0.05)
+            end
+        end)
+    end)
+end
+local comboSession, chaosSession, titansSession = 0, 0, 0
+local function startRebirthCombination()
+    if rebirthComboOn then
+        runRebirthMode(function()
+            return rebirthComboOn
+        end, function()
+            return comboSession
+        end, function(_eI)
+            comboSession = _eI
+        end, function(_eJ)
+            equipBestRepPets(_eJ)
+        end, function(_eK)
+            equipBestRebirthPets(_eK)
+        end)
+    end
+end
+local function startRebirthChaos()
+    if rebirthChaosOn then
+        runRebirthMode(function()
+            return rebirthChaosOn
+        end, function()
+            return chaosSession
+        end, function(_eM)
+            chaosSession = _eM
+        end, function(_eN)
+            equipRepSet("Swift Samurai", _eN)
+        end, function(_eO)
+            equipRebirthSet("Tribal Overlord", _eO)
+        end)
+    end
+end
+local function startRebirthTitans()
+    if rebirthTitansOn then
+        runRebirthMode(function()
+            return rebirthTitansOn
+        end, function()
+            return titansSession
+        end, function(_eQ)
+            titansSession = _eQ
+        end, function(_eR)
+            equipRepSet("Omega Overlord", _eR)
+        end, function(_eS)
+            equipRebirthSet("Titanium Hydra", _eS)
+        end)
+    end
+end
+local fastRepTask = nil
+local function stopFastRep()
+    state.FastRep = false
+    if fastRepTask then
+        task.cancel(fastRepTask)
+        fastRepTask = nil
+    end
+end
+local function startFastRep(_eW)
+    if not state.FastRep then
+        local _eX = getStats()
+        tracker.LastStr = _eX.Str
+        tracker.TotalStr = 0
+        tracker.TotalDur = 0
+        tracker.FastRepStartTime = tick()
+        tracker.SnapStr = 0
+        tracker.SnapDur = 0
+        tracker.SnapTime = tick()
+    end
+    stopFastRep()
+    state.FastRep = true
+    fastRepTask = task.spawn(function()
+        local _eY = LocalPlayer:FindFirstChild("muscleEvent") or LocalPlayer:FindFirstChild("MuscleEvent")
+        local _eZ = 0
+        local _fa = tick()
+        while state.FastRep do
+            if not _eY or not _eY.Parent then
+                _eY = LocalPlayer:FindFirstChild("muscleEvent") or LocalPlayer:FindFirstChild("MuscleEvent")
+            end
+            if _eY then
+                local _fb = tick()
+                local _fc = _fb - _fa
+                _fa = _fb
+                _eZ = _eZ + (_eW * _fc)
+                local _fd = math.floor(_eZ)
+                if _fd > 0 then
+                    _eZ = _eZ - _fd
+                    local _fe = _eY.FireServer
+                    local _ff = 0
+                    while _ff < _fd do
+                        local _fg = math.random(35, 65)
+                        local _fh = math.min(_fg, _fd - _ff)
+                        for _fi = 1, _fh do
+                            pcall(_fe, _eY, "rep")
+                        end
+                        _ff = _ff + _fh
+                        if _ff < _fd then
+                            task.wait(jitter(0.005, 0.003))
+                        end
+                    end
+                end
+            end
+            RunService.Heartbeat:Wait()
+        end
+    end)
+end
+local function startAutoRebirth()
+    if state.AutoRebirth then
+        return
+    end
+    state.AutoRebirth = true
+    local _fk = getStats()
+    tracker.LastReb = _fk.Reb
+    tracker.TotalReb = 0
+    tracker.RebStartTime = tick()
+    tracker.SnapReb = 0
+    tracker.RebSnapTime = tick()
+    task.spawn(function()
+        while state.AutoRebirth do
+            pcall(function()
+                local _fl = RS:FindFirstChild("rEvents")
+                local _fm = _fl and _fl:FindFirstChild("rebirthRemote")
+                if _fm then
+                    _fm:InvokeServer("rebirthRequest")
+                end
+            end)
+            task.wait(jitter(6, 0.3))
+        end
+    end)
+end
+local punchTask = nil
+local function startAutoPunch()
+    if state.AutoPunch then
+        return
+    end
+    state.AutoPunch = true
+    punchTask = task.spawn(function()
+        while state.AutoPunch do
+            local _fp = LocalPlayer.Character
+            if _fp and _fp:FindFirstChildOfClass("Humanoid") and _fp.Humanoid.Health > 0 then
+                local _fq = LocalPlayer:FindFirstChild("muscleEvent") or LocalPlayer:FindFirstChild("MuscleEvent")
+                if _fq then
+                    pcall(function()
+                        _fq:FireServer("punch", "leftHand")
+                        _fq:FireServer("punch", "rightHand")
+                    end)
+                end
+            end
+            RunService.Heartbeat:Wait()
+        end
+    end)
+end
+local function stopAutoPunch()
+    state.AutoPunch = false
+    if punchTask then
+        task.cancel(punchTask)
+        punchTask = nil
+    end
+end
+local function startKillAura()
+    if state.KillAura then
+        return
+    end
+    state.KillAura = true
+    task.spawn(function()
+        while state.KillAura do
+            local _ft = getRoot()
+            local _fu = LocalPlayer:FindFirstChild("muscleEvent") or LocalPlayer:FindFirstChild("MuscleEvent")
+            if _ft and _fu then
+                local _fv = nil
+                local _fw = 35
+                for _fx, _fy in ipairs(Players:GetPlayers()) do
+                    if _fy ~= LocalPlayer and _fy.Character then
+                        local _fz = _fy.Character:FindFirstChild("HumanoidRootPart")
+                        local _fA = _fy.Character:FindFirstChildOfClass("Humanoid")
+                        if _fz and _fA and _fA.Health > 0 then
+                            local _fB = (_ft.Position - _fz.Position).Magnitude
+                            if _fB < _fw then
+                                _fw = _fB
+                                _fv = _fz
+                            end
+                        end
+                    end
+                end
+                if _fv then
+                    pcall(function()
+                        _ft.CFrame = CFrame.lookAt(_ft.Position, Vector3.new(_fv.Position.X, _ft.Position.Y, _fv.Position.Z))
+                        _fu:FireServer("punch", "leftHand")
+                        _fu:FireServer("punch", "rightHand")
+                    end)
+                end
+            end
+            task.wait(jitter(0.1, 0.02))
+        end
+    end)
+end
+local bossConn = nil
+local crystalTask = nil
+local gymTask = nil
+local alienBossTask = nil
+local alienMachineTask = nil
+local alienShopTask = nil
+local function normalizeName(_fJ)
+    return string.lower(_fJ):gsub("[%s_%-%.]", "")
+end
+local function findSellRemote()
+    local _fL = RS:FindFirstChild("rEvents")
+    if _fL then
+        for _fM, _fN in ipairs({"sellPetEvent", "sellPetRemote", "sellPet", "sellPetsEvent", "sellPetFunction"}) do
+            local _fO = _fL:FindFirstChild(_fN)
+            if _fO and (_fO:IsA("RemoteEvent") or _fO:IsA("RemoteFunction")) then
+                return _fO, "rEvents." .. _fN
+            end
+        end
+        for _fP, _fQ in ipairs(_fL:GetChildren()) do
+            if _fQ:IsA("RemoteEvent") or _fQ:IsA("RemoteFunction") then
+                local _fR = string.lower(_fQ.Name)
+                if string.find(_fR, "sell") and string.find(_fR, "pet") then
+                    return _fQ, "rEvents." .. _fQ.Name
+                end
+            end
+        end
+    end
+    local _fS = RS:FindFirstChild("packages")
+    local _fT = _fS and _fS:FindFirstChild("Net")
+    if _fT then
+        for _fU, _fV in ipairs(_fT:GetChildren()) do
+            if _fV:IsA("RemoteEvent") or _fV:IsA("RemoteFunction") then
+                local _fW = string.lower(_fV.Name)
+                if string.find(_fW, "sell") and string.find(_fW, "pet") then
+                    return _fV, "Net." .. _fV.Name
+                end
+            end
+        end
+    end
+    return nil, nil
+end
+local function sellPet(_fY, _fZ)
+    if not _fY or not _fZ or not _fZ.Parent then
+        return false
+    end
+    local _ga = pcall(function()
+        if _fY:IsA("RemoteFunction") then
+            _fY:InvokeServer("sellPet", _fZ)
+        else
+            _fY:FireServer("sellPet", _fZ)
+        end
+    end)
+    return _ga
+end
+local function getPetsToSell()
+    local _gc = {}
+    local _gd = LocalPlayer:FindFirstChild("petsFolder")
+    if not _gd then
+        return _gc
+    end
+    local _ge = {}
+    local _gf = {}
+    local _gg = {}
+    for _gh, _gi in ipairs(_gd:GetChildren()) do
+        if _gi:IsA("Folder") then
+            for _gj, _gk in ipairs(_gi:GetChildren()) do
+                local _gl = normalizeName(_gk.Name)
+                if _gl == "ufobot" then
+                    table.insert(_ge, _gk)
+                elseif _gl == "cosmicinvader" then
+                    table.insert(_gf, _gk)
+                elseif _gl == "alienslime" then
+                    table.insert(_gg, _gk)
+                end
+            end
+        end
+    end
+    if autoSell.TargetPets.UFOBot then
+        local _gm = #_ge
+        if autoSell.KeepOneUFOBot then
+            _gm = math.max(0, _gm - 1)
+        end
+        for _gn = 1, _gm do
+            table.insert(_gc, _ge[_gn])
+        end
+    end
+    if autoSell.TargetPets.CosmicInvader then
+        for _go, _gp in ipairs(_gf) do
+            table.insert(_gc, _gp)
+        end
+    end
+    if autoSell.TargetPets.AlienSlime then
+        for _gq, _gr in ipairs(_gg) do
+            table.insert(_gc, _gr)
+        end
+    end
+    return _gc
+end
+local function startAutoSell()
+    if autoSell.Enabled then
+        return
+    end
+    autoSell.Enabled = true
+    autoSell.Sold = 0
+    autoSell.LastSell = 0
+    if autoSell.Conn then
+        task.cancel(autoSell.Conn)
+    end
+    autoSell.Conn = task.spawn(function()
+        local _gt, _gu = findSellRemote()
+        if not _gt then
+            autoSell.Status = "❌ No sell remote found"
+            autoSell.Enabled = false
+            return
+        end
+        autoSell.Status = "Using " .. _gu
+        while autoSell.Enabled do
+            pcall(function()
+                local _gv = tick()
+                if _gv - autoSell.LastSell >= autoSell.SellInterval then
+                    local _gw = getPetsToSell()
+                    if#_gw > 0 then
+                        for _gx, _gy in ipairs(_gw) do
+                            if not autoSell.Enabled then
+                                break
+                            end
+                            if sellPet(_gt, _gy) then
+                                autoSell.Sold = autoSell.Sold + 1
+                            end
+                            task.wait(0.03)
+                        end
+                        autoSell.Status = "💰 Total sold: " .. autoSell.Sold
+                    else
+                        autoSell.Status = "⏳ Waiting for target pets..."
+                    end
+                    autoSell.LastSell = tick()
+                end
+            end)
+            task.wait(0.1)
+        end
+    end)
+end
+local function stopAutoSell()
+    autoSell.Enabled = false
+    if autoSell.Conn then
+        task.cancel(autoSell.Conn)
+        autoSell.Conn = nil
+    end
+    autoSell.Status = "Idle"
+end
+local function startAutoAlienMachines()
+    if alienMachineTask then
+        task.cancel(alienMachineTask)
+    end
+    alienMachineTask = task.spawn(function()
+        while state.AutoAlienMachines do
+            pcall(function()
+                local _gB = getCharacter()
+                local _gC = getRoot()
+                local _gD = _gB and _gB:FindFirstChildOfClass("Humanoid")
+                if not _gC or not _gD then
+                    task.wait(1)
+                    return
+                end
+                local _gE = nil
+                local _gF = workspace:FindFirstChild("machinesFolder")
+                if _gF then
+                    for _gG, _gH in ipairs(_gF:GetChildren()) do
+                        local _gI = string.lower(_gH.Name)
+                        if string.find(_gI, "alien") or string.find(_gI, "plasma") then
+                            _gE = _gH
+                            break
+                        end
+                    end
+                end
+                if not _gE then
+                    for _gJ, _gK in ipairs(workspace:GetDescendants()) do
+                        if _gK:IsA("Model") then
+                            local _gL = string.lower(_gK.Name)
+                            local _gM = string.find(_gL, "alien") or string.find(_gL, "plasma")
+                            local _gN = string.find(_gL, "bar") or string.find(_gL, "treadmill") or string.find(_gL, "dumbbell") or string.find(_gL, "pullup") or string.find(_gL, "pull%-up") or string.find(_gL, "machine") or string.find(_gL, "bench")
+                            if _gM and _gN then
+                                _gE = _gK
+                                break
+                            end
+                        end
+                    end
+                end
+                if _gE then
+                    local _gO = _gE:FindFirstChildWhichIsA("ProximityPrompt", true)
+                    local _gP = _gE:FindFirstChildWhichIsA("Seat", true) or _gE:FindFirstChildWhichIsA("VehicleSeat", true)
+                    local _gQ = nil
+                    if _gO then
+                        if _gO.Parent:IsA("BasePart") then
+                            _gQ = _gO.Parent
+                        elseif _gO.Parent:IsA("Attachment") then
+                            _gQ = _gO.Parent.Parent
+                        end
+                    end
+                    if not _gQ then
+                        _gQ = _gP or _gE:FindFirstChildWhichIsA("BasePart", true)
+                    end
+                    if _gQ and not _gD.Sit then
+                        if _gC.Anchored then
+                            _gC.Anchored = false
+                        end
+                        _gC.CFrame = CFrame.new(_gQ.Position + Vector3.new(0, 3, 0))
+                        task.wait(0.3)
+                        local _gR = LocalPlayer:FindFirstChild("Backpack")
+                        if _gR then
+                            for _gS, _gT in ipairs(_gR:GetChildren()) do
+                                if _gT:IsA("Tool") then
+                                    local _gU = string.lower(_gT.Name)
+                                    if string.find(_gU, "alien") or string.find(_gU, "plasma") then
+                                        pcall(function()
+                                            _gD:EquipTool(_gT)
+                                        end)
+                                        break
+                                    end
+                                end
+                            end
+                        end
+                        if _gO then
+                            local _gV = _gO.MaxActivationDistance
+                            _gO.MaxActivationDistance = 999999
+                            pcall(fireproximityprompt, _gO)
+                            task.wait(0.1)
+                            _gO.MaxActivationDistance = _gV
+                        end
+                        if _gP then
+                            pcall(function()
+                                _gD.Sit = true
+                            end)
+                        end
+                        pcall(function()
+                            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                            task.wait(0.1)
+                            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                        end)
+                    end
+                end
+                if not state.AutoPunch then
+                    startAutoPunch()
+                end
+            end)
+            task.wait(1)
+        end
+    end)
+end
+local function getArenaBosses()
+    local _gX, _gY = {}, {}
+    local _gZ = getCharacter()
+    local function _ha(_hb)
+        if _hb and _hb:IsA("Model") and _hb ~= _gZ and not _gY[_hb] and _hb:IsDescendantOf(WorkspaceService) then
+            if not selectedBosses[_hb.Name] then
+                return
+            end
+            _gY[_hb] = true
+            table.insert(_gX, _hb)
+        end
+    end
+    if (not arenaCache.Arena or not arenaCache.Arena.Parent) and tick() - (arenaCache.LastCheck or 0) >= 2 then
+        arenaCache.LastCheck = tick()
+        local _hc = WorkspaceService:FindFirstChild("Events")
+        arenaCache.Arena = _hc and _hc:FindFirstChild("BossArena")
+        if not arenaCache.Arena then
+            for _hd, _he in ipairs(WorkspaceService:GetDescendants()) do
+                if _he.Name == "BossArena" and _he:IsA("Folder") then
+                    arenaCache.Arena = _he
+                    break
+                end
+            end
+        end
+    end
+    if arenaCache.Arena then
+        for _hf, _hg in ipairs(arenaCache.Arena:GetChildren()) do
+            if selectedBosses[_hg.Name] then
+                _ha(_hg)
+            end
+        end
+    end
+    for _hh, _hi in ipairs(game:GetService("CollectionService"):GetTagged("BossEventBoss")) do
+        if selectedBosses[_hi.Name] then
+            _ha(_hi)
+        end
+    end
+    return _gX
+end
+local function ensureHitbox(_hk)
+    if not _hk then
+        return nil
+    end
+    local _hl = _hk:FindFirstChild("Hitbox")
+    if _hl and _hl:IsA("BasePart") then
+        return _hl
+    end
+    local _hm = _hk:FindFirstChild("BossDamageHitbox", true) or _hk:FindFirstChild("HumanoidRootPart") or _hk:FindFirstChild("Torso") or _hk.PrimaryPart or _hk:FindFirstChildWhichIsA("BasePart")
+    if not _hm then
+        return nil
+    end
+    local _hn = Instance.new("Part")
+    _hn.Name = "Hitbox"
+    _hn.Size = Vector3.new(12, 12, 12)
+    _hn.Transparency = 1
+    _hn.CanCollide = false
+    _hn.CanQuery = true
+    _hn.CanTouch = true
+    _hn.Massless = true
+    _hn.Anchored = false
+    _hn.CFrame = _hm.CFrame
+    local _ho = Instance.new("WeldConstraint")
+    _ho.Part0 = _hm
+    _ho.Part1 = _hn
+    _ho.Parent = _hn
+    _hn.Parent = _hk
+    return _hn
+end
+local function formatShort(_hq)
+    _hq = tonumber(_hq) or 0
+    local _hr = {"", "K", "M", "B", "T", "Qa"}
+    local _hs = 0
+    while _hq >= 1000 and _hs < #_hr - 1 do
+        _hq = _hq / 1000
+        _hs = _hs + 1
+    end
+    if _hs == 0 then
+        return tostring(math.floor(_hq))
+    end
+    return string.format("%.2f%s", _hq, _hr[_hs + 1])
+end
+local function getBossHealth(_hu)
+    local _hv = _hu:FindFirstChild("stats")
+    local _hw = _hv and _hv:FindFirstChild("Health")
+    local _hx = _hv and _hv:FindFirstChild("MaxHealth")
+    if _hw and _hw:IsA("ValueBase") and type(_hw.Value) == "number" then
+        return _hw.Value, (_hx and tonumber(_hx.Value)) or _hw.Value
+    end
+    local _hy = _hu:FindFirstChildOfClass("Humanoid")
+    if _hy then
+        return _hy.Health, _hy.MaxHealth
+    end
+    local _hz = tonumber(_hu:GetAttribute("Health"))
+    if _hz then
+        return _hz, tonumber(_hu:GetAttribute("MaxHealth")) or _hz
+    end
+    return nil, nil
+end
+local function attackBoss(_hB, _hC)
+    local _hD = getCharacter()
+    local _hE = _hD and _hD:FindFirstChild("HumanoidRootPart")
+    local _hF = _hD and _hD:FindFirstChildOfClass("Humanoid")
+    if not _hE or not _hF or _hF.Health <= 0 then
+        return
+    end
+    local _hG = LocalPlayer:FindFirstChild("Backpack")
+    local _hH = _hD:FindFirstChild("Punch") or (_hG and _hG:FindFirstChild("Punch"))
+    if _hH and _hH.Parent == _hG then
+        _hF:EquipTool(_hH)
+    end
+    local _hI = _hB:FindFirstChild("Head", true)
+    local _hJ = _hI and _hI.Position or (_hC.Position + Vector3.new(0, _hC.Size.Y * 0.35, 0))
+    _hE.CFrame = CFrame.lookAt(_hJ + Vector3.new(0, 8, 0), _hJ)
+    _hE.AssemblyLinearVelocity = Vector3.zero
+    _hE.AssemblyAngularVelocity = Vector3.zero
+    local _hK = _hD:FindFirstChild("LeftHand")
+    local _hL = _hD:FindFirstChild("RightHand")
+    if _hK and _hL then
+        pcall(function()
+            firetouchinterest(_hC, _hL, 0)
+            firetouchinterest(_hC, _hL, 1)
+            firetouchinterest(_hC, _hK, 0)
+            firetouchinterest(_hC, _hK, 1)
+        end)
+    end
+    local _hM = LocalPlayer:FindFirstChild("muscleEvent") or LocalPlayer:FindFirstChild("MuscleEvent")
+    if _hM then
+        pcall(function()
+            _hM:FireServer("punch", "leftHand")
+            _hM:FireServer("punch", "rightHand")
+        end)
+    end
+    if _hH and _hH.Parent == _hD then
+        pcall(function()
+            _hH:Activate()
+        end)
+    end
+end
+local claimedChests = setmetatable({}, {__mode = "k"})
+local function findBossChest()
+    for _hP, _hQ in ipairs(game:GetService("CollectionService"):GetTagged("BossEventChest")) do
+        if _hQ:IsDescendantOf(WorkspaceService) and not claimedChests[_hQ] then
+            local _hR = _hQ:FindFirstChild("bossChestPrompt", true)
+            local _hS = (_hR and _hR.Parent) or (_hQ:IsA("BasePart") and _hQ) or (_hQ:IsA("Model") and (_hQ.PrimaryPart or _hQ:FindFirstChildWhichIsA("BasePart", true)))
+            if _hS and _hS:IsA("BasePart") then
+                return _hQ, _hR, _hS
+            end
+        end
+    end
+    for _hT, _hU in ipairs(WorkspaceService:GetDescendants()) do
+        if _hU:IsA("ProximityPrompt") and _hU.Name == "bossChestPrompt" then
+            local _hV = _hU.Parent
+            if _hV and _hV:IsA("Attachment") then
+                _hV = _hV.Parent
+            end
+            if _hV and _hV:IsA("BasePart") and not claimedChests[_hV] then
+                return _hV, _hU, _hV
+            end
+        end
+    end
+    return nil
+end
+local function claimChest(_hX, _hY, _hZ)
+    claimedChests[_hX] = true
+    task.wait(0.3)
+    local _ia = getCharacter()
+    local _ib = _ia and _ia:FindFirstChild("HumanoidRootPart")
+    if _ib and _hZ.Parent then
+        pcall(function()
+            _ib.CFrame = CFrame.lookAt(_hZ.Position + Vector3.new(0, 3, 4), _hZ.Position)
+            _ib.AssemblyLinearVelocity = Vector3.zero
+        end)
+    end
+    task.wait(0.2)
+    local _ic = 0
+    while state.AutoFarmBoss and _hX.Parent and _ic < 6 do
+        _ic = _ic + 1
+        local _id = false
+        if _hY and _hY.Parent and type(fireproximityprompt) == "function" then
+            _id = pcall(fireproximityprompt, _hY)
+        end
+        if not _id then
+            pcall(function()
+                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                task.wait(0.1)
+                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+            end)
+        end
+        task.wait(jitter(0.5, 0.1))
+    end
+end
+local function startAutoFarmBoss()
+    if state.AutoFarmBoss then
+        return
+    end
+    state.AutoFarmBoss = true
+    local _if = 0
+    task.spawn(function()
+        while state.AutoFarmBoss do
+            pcall(function()
+                local _ig, _ih, _ii
+                if tick() - _if >= 1 then
+                    _if = tick()
+                    _ig, _ih, _ii = findBossChest()
+                end
+                if _ig and _ii and _ig:GetAttribute("BossChestEmerging") ~= true then
+                    state.CurrentBoss = "Claiming chest..."
+                    state.BossHealth = "—"
+                    claimChest(_ig, _ih, _ii)
+                    return
+                end
+                local _ij = getRoot()
+                local _ik, _il = nil, math.huge
+                for _im, _in in ipairs(getArenaBosses()) do
+                    local _io = getBossHealth(_in)
+                    if _io == nil or _io > 0 then
+                        local _ip = _in:FindFirstChild("BossDamageHitbox", true) or _in.PrimaryPart or _in:FindFirstChildWhichIsA("BasePart", true)
+                        local _iq = (_ij and _ip) and (_ij.Position - _ip.Position).Magnitude or 0
+                        if _iq < _il then
+                            _ik, _il = _in, _iq
+                        end
+                    end
+                end
+                if not _ik then
+                    state.CurrentBoss = "Waiting for boss..."
+                    state.BossHealth = "—"
+                    return
+                end
+                local _ir = _ik:FindFirstChild("BossDamageHitbox", true)
+                if not (_ir and _ir:IsA("BasePart")) then
+                    _ir = ensureHitbox(_ik)
+                end
+                if not _ir then
+                    return
+                end
+                local _is, _it = getBossHealth(_ik)
+                state.CurrentBoss = bossNames[_ik.Name] or _ik.Name
+                state.BossHealth = _is and (formatShort(_is) .. " / " .. formatShort(_it)) or "No data"
+                attackBoss(_ik, _ir)
+            end)
+            task.wait(jitter(0.01, 0.003))
+        end
+    end)
+end
+local function stopAutoFarmBoss()
+    state.AutoFarmBoss = false
+    state.CurrentBoss = "None"
+    state.BossHealth = "N/A"
+    if bossConn then
+        bossConn:Disconnect()
+        bossConn = nil
+    end
+    stopAutoPunch()
+    local _iv = getRoot()
+    if _iv then
+        pcall(function()
+            _iv.Anchored = false
+        end)
+    end
+    local _iw = arenaCache.Arena
+    if _iw then
+        for _ix, _iy in ipairs(_iw:GetChildren()) do
+            if _iy:IsA("Model") then
+                local _iz = _iy:FindFirstChild("Hitbox")
+                if _iz then
+                    _iz:Destroy()
+                end
+            end
+        end
+    end
+end
+local function findAlienBoss()
+    local _iB = workspace:FindFirstChild("Alien Boss")
+    if _iB and _iB:IsA("Model") then
+        local _iC = _iB:FindFirstChild("alienBossHealth", true)
+        local _iD = _iB:FindFirstChildOfClass("Humanoid")
+        if _iC and _iC:IsA("ValueBase") and _iC.Value <= 0 then
+            return nil
+        end
+        if _iD and _iD.Health <= 0 then
+            return nil
+        end
+        return _iB
+    end
+    local _iE = workspace:FindFirstChild("alienBossHealth", true)
+    if _iE and _iE:IsA("ValueBase") and _iE.Value > 0 then
+        local _iF = _iE:FindFirstAncestorOfClass("Model")
+        if _iF then
+            return _iF
+        end
+    end
+    for _iG, _iH in ipairs(workspace:GetDescendants()) do
+        if _iH:IsA("Model") then
+            local _iI = string.lower(_iH.Name)
+            if (string.find(_iI, "alien boss") or string.find(_iI, "alienboss")) and not string.find(_iI, "arena") then
+                local _iJ = _iH:FindFirstChild("alienBossHealth", true)
+                local _iK = _iH:FindFirstChildOfClass("Humanoid")
+                if _iJ and _iJ:IsA("ValueBase") and _iJ.Value <= 0 then
+                elseif _iK and _iK.Health <= 0 then
+                else
+                    return _iH
+                end
+            end
+        end
+    end
+    return nil
+end
+local function claimAlienChest()
+    local _iM = getCharacter()
+    local _iN = getRoot()
+    if not _iM or not _iN then
+        return
+    end
+    local _iO = workspace:FindFirstChild("Alien Chest", true)
+    if not _iO then
+        for _iP, _iQ in pairs(workspace:GetDescendants()) do
+            if (_iQ:IsA("Model") or _iQ:IsA("BasePart")) and string.find(string.lower(_iQ.Name), "chest") then
+                _iO = _iQ
+                break
+            end
+        end
+    end
+    if _iO then
+        local _iR = _iO:IsA("BasePart") and _iO or _iO:FindFirstChildWhichIsA("BasePart", true)
+        if _iR then
+            _iN.CFrame = CFrame.new(_iR.Position + Vector3.new(0, 3, 4))
+            task.wait(0.2)
+            local _iS = _iO:FindFirstChildWhichIsA("ProximityPrompt", true)
+            local _iT = _iO:FindFirstChildWhichIsA("ClickDetector", true)
+            if _iS then
+                local _iU = _iS.MaxActivationDistance
+                _iS.MaxActivationDistance = 999999
+                pcall(fireproximityprompt, _iS)
+                _iS.MaxActivationDistance = _iU
+            elseif _iT then
+                pcall(fireclickdetector, _iT)
+            else
+                pcall(function()
+                    firetouchinterest(_iR, _iN, 0)
+                    firetouchinterest(_iR, _iN, 1)
+                end)
+            end
+        end
+    end
+    task.wait(0.5)
+    for _iV, _iW in ipairs(PlayerGui:GetDescendants()) do
+        if _iW:IsA("TextButton") and _iW.Visible then
+            local _iX = string.lower(_iW.Text)
+            if string.find(_iX, "open") then
+                if getconnections then
+                    for _iY, _iZ in ipairs(getconnections(_iW.MouseButton1Click)) do
+                        if _iZ.Fire then
+                            pcall(function()
+                                _iZ:Fire()
+                            end)
+                        end
+                    end
+                else
+                    local _ja = _iW.AbsolutePosition
+                    local _jb = _iW.AbsoluteSize
+                    pcall(function()
+                        VirtualInputManager:SendMouseButtonEvent(_ja.X + _jb.X / 2, _ja.Y + _jb.Y / 2, 0, true, game, 0)
+                        VirtualInputManager:SendMouseButtonEvent(_ja.X + _jb.X / 2, _ja.Y + _jb.Y / 2, 0, false, game, 0)
+                    end)
+                end
+            end
+        end
+    end
+end
+local function startAlienBossFarm()
+    state.AutoFarmAlienBoss = true
+    if alienBossTask then
+        task.cancel(alienBossTask)
+    end
+    alienBossTask = task.spawn(function()
+        local _jd = false
+        while state.AutoFarmAlienBoss do
+            pcall(function()
+                local _je = findAlienBoss()
+                if _je then
+                    _jd = true
+                    if getgenv().AlienStatusLbl then
+                        updatePara(getgenv().AlienStatusLbl, "Attacking: " .. _je.Name)
+                    end
+                    local _jf = _je:FindFirstChild("BossDamageHitbox", true)
+                    if not (_jf and _jf:IsA("BasePart")) then
+                        _jf = ensureHitbox(_je)
+                    end
+                    if _jf then
+                        attackBoss(_je, _jf)
+                    end
+                else
+                    if _jd then
+                        if getgenv().AlienStatusLbl then
+                            updatePara(getgenv().AlienStatusLbl, "Boss dead! Claiming chest...")
+                        end
+                        task.wait(1)
+                        claimAlienChest()
+                        task.wait(2)
+                        _jd = false
+                    else
+                        if getgenv().AlienStatusLbl then
+                            updatePara(getgenv().AlienStatusLbl, "Waiting for boss...")
+                        end
+                    end
+                end
+            end)
+            task.wait(jitter(0.05, 0.01))
+        end
+    end)
+end
+local function stopAlienBossFarm()
+    state.AutoFarmAlienBoss = false
+    if alienBossTask then
+        task.cancel(alienBossTask)
+        alienBossTask = nil
+    end
+    if getgenv().AlienStatusLbl then
+        updatePara(getgenv().AlienStatusLbl, "Idle")
+    end
+end
+local function startAutoBuyAlienShop()
+    if alienShopTask then
+        task.cancel(alienShopTask)
+    end
+    alienShopTask = task.spawn(function()
+        while state.AutoBuyAlienShop do
+            pcall(function()
+                local _ji = RS:FindFirstChild("packages")
+                local _jj = _ji and _ji:FindFirstChild("Net")
+                local _jk = _jj and _jj:FindFirstChild("RF/AlienShop")
+                if _jk and _jk:IsA("RemoteFunction") then
+                    for _jl, _jm in pairs(selectedShopItems) do
+                        if not state.AutoBuyAlienShop then
+                            break
+                        end
+                        pcall(function()
+                            _jk:InvokeServer(_jm.Key)
+                        end)
+                        task.wait(0.5)
+                    end
+                end
+            end)
+            task.wait(1)
+        end
+    end)
+end
+local function startAutoCrystal()
+    if crystalTask then
+        task.cancel(crystalTask)
+    end
+    crystalTask = task.spawn(function()
+        while state.AutoCrystal do
+            pcall(function()
+                local _jo = nil
+                for _jp, _jq in ipairs(PlayerGui:GetDescendants()) do
+                    if _jq:IsA("TextButton") and _jq.Visible then
+                        local _jr = string.lower(_jq.Text)
+                        if string.find(_jr, "open 1") or string.find(_jr, "open1") or string.find(_jr, "open 3") or string.find(_jr, "open 10") then
+                            _jo = _jq
+                            break
+                        end
+                    end
+                end
+                if _jo then
+                    if getconnections then
+                        local _js = false
+                        for _jt, _ju in ipairs(getconnections(_jo.MouseButton1Click)) do
+                            if _ju.Fire then
+                                pcall(function()
+                                    _ju:Fire()
+                                end)
+                                _js = true
+                            end
+                        end
+                        if not _js and firesignal then
+                            pcall(function()
+                                firesignal(_jo.MouseButton1Click)
+                            end)
+                        end
+                    else
+                        local _jv = _jo.AbsolutePosition
+                        local _jw = _jo.AbsoluteSize
+                        pcall(function()
+                            if firesignal then
+                                firesignal(_jo.MouseButton1Click)
+                            end
+                            VirtualInputManager:SendMouseButtonEvent(_jv.X + _jw.X / 2, _jv.Y + _jw.Y / 2, 0, true, game, 0)
+                            VirtualInputManager:SendMouseButtonEvent(_jv.X + _jw.X / 2, _jv.Y + _jw.Y / 2, 0, false, game, 0)
+                        end)
+                    end
+                    task.wait(0.3)
+                    return
+                end
+                local _jx = workspace:FindFirstChild("mapCrystalsFolder")
+                local _jy = _jx and _jx:FindFirstChild("Zero Degrees Crystal")
+                if _jy then
+                    local _jz = _jy:FindFirstChildWhichIsA("ProximityPrompt", true)
+                    if _jz then
+                        local _jA = _jz.MaxActivationDistance
+                        _jz.MaxActivationDistance = 999999
+                        pcall(fireproximityprompt, _jz)
+                        task.wait(0.1)
+                        _jz.MaxActivationDistance = _jA
+                    else
+                        local _jB = _jy:IsA("BasePart") and _jy or _jy:FindFirstChildWhichIsA("BasePart")
+                        local _jC = getRoot()
+                        if _jB and _jC then
+                            _jC.CFrame = CFrame.new(_jB.Position + Vector3.new(0, 3, 5))
+                            task.wait(0.1)
+                            pcall(function()
+                                firetouchinterest(_jB, _jC, 0)
+                                firetouchinterest(_jB, _jC, 1)
+                            end)
+                        end
+                    end
+                end
+            end)
+            task.wait(0.3)
+        end
+    end)
+end
+local function startAutoGym()
+    if gymTask then
+        task.cancel(gymTask)
+    end
+    gymTask = task.spawn(function()
+        while state.AutoGym do
+            pcall(function()
+                local _jE = workspace:FindFirstChild("machinesFolder")
+                local _jF = getRoot()
+                local _jG = getCharacter()
+                local _jH = _jG and _jG:FindFirstChildOfClass("Humanoid")
+                if _jE and _jF and _jH then
+                    local _jI = _jE:FindFirstChild("Zero Degrees Bar Lift 1")
+                    if not _jI then
+                        for _jJ, _jK in ipairs(_jE:GetChildren()) do
+                            if _jK.Name:find("Bar Lift") or _jK.Name:find("Bench") or _jK.Name:find("Squat") then
+                                _jI = _jK
+                                break
+                            end
+                        end
+                    end
+                    if _jI then
+                        local _jL = _jI:FindFirstChildWhichIsA("ProximityPrompt", true)
+                        local _jM = _jI:FindFirstChildWhichIsA("Seat", true) or _jI:FindFirstChildWhichIsA("VehicleSeat", true)
+                        local _jN = nil
+                        if _jL then
+                            if _jL.Parent:IsA("BasePart") then
+                                _jN = _jL.Parent
+                            elseif _jL.Parent:IsA("Attachment") then
+                                _jN = _jL.Parent.Parent
+                            end
+                        end
+                        if not _jN then
+                            _jN = _jM or _jI:FindFirstChildWhichIsA("BasePart", true)
+                        end
+                        if _jN then
+                            if not _jH.Sit then
+                                if _jF.Anchored then
+                                    _jF.Anchored = false
+                                end
+                                _jF.CFrame = CFrame.new(_jN.Position + Vector3.new(0, 3, 0))
+                                task.wait(0.3)
+                                local _jO = LocalPlayer:FindFirstChild("Backpack")
+                                if _jO then
+                                    for _jP, _jQ in ipairs(_jO:GetChildren()) do
+                                        if _jQ:IsA("Tool") then
+                                            pcall(function()
+                                                _jH:EquipTool(_jQ)
+                                            end)
+                                            break
+                                        end
+                                    end
+                                end
+                                if _jL then
+                                    local _jR = _jL.MaxActivationDistance
+                                    _jL.MaxActivationDistance = 999999
+                                    pcall(fireproximityprompt, _jL)
+                                    task.wait(0.1)
+                                    _jL.MaxActivationDistance = _jR
+                                end
+                                if _jM then
+                                    pcall(function()
+                                        _jH.Sit = true
+                                    end)
+                                end
+                                pcall(function()
+                                    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                                    task.wait(0.1)
+                                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                                end)
+                            end
+                        end
+                    end
+                end
+                if not state.AutoPunch then
+                    startAutoPunch()
+                end
+            end)
+            task.wait(1)
+        end
+    end)
+end
+local antiAfkConn = nil
+local function setAntiAfk(_jU)
+    if _jU then
+        if antiAfkConn then
+            return
+        end
+        antiAfkConn = LocalPlayer.Idled:Connect(function()
+            local _jV = LocalPlayer.Character
+            if _jV and _jV:FindFirstChildOfClass("Humanoid") then
+                _jV.Humanoid.Jump = true
+            end
+        end)
+    else
+        if antiAfkConn then
+            antiAfkConn:Disconnect()
+            antiAfkConn = nil
+        end
+    end
+end
+setAntiAfk(true)
+local fpsBoostFlags = {
+    DFIntPhysicsEMAInverseSmoothingFactor = "2074",
+    DFIntPhysicsEMAInverseSmoothingFactorThrottling = "5012",
+    FIntInterpolationMaxDelayMSec = "100",
+    FIntInterpolationAwareTargetTimeLerpHundredth = "40",
+    DFIntMaxClientSimulationRadius = "99999",
+    DFIntMinClientSimulationRadius = "99999",
+    DFIntMaxAcceptableUpdateDelay = "1",
+    DFIntMaxReceiveToDeserializeLatencyMilliseconds = "10",
+    DFIntClientPacketMaxDelayMs = "1",
+    DFIntClientPacketMaxFrameMicroseconds = "200",
+    DFIntCodecMaxOutgoingFrames = "10000",
+    DFIntS2PhysicsSenderRate = "256",
+    DFIntPhysicsSenderMaxBandwidthBps = "20000",
+    DFIntDataSenderRate = "38760",
+}
+local defaultFlags = {
+    DFIntPhysicsEMAInverseSmoothingFactor = "10000",
+    DFIntPhysicsEMAInverseSmoothingFactorThrottling = "20000",
+    FIntInterpolationMaxDelayMSec = "200",
+    FIntInterpolationAwareTargetTimeLerpHundredth = "100",
+    DFIntMaxClientSimulationRadius = "1000",
+    DFIntMinClientSimulationRadius = "150",
+    DFIntMaxAcceptableUpdateDelay = "100",
+    DFIntMaxReceiveToDeserializeLatencyMilliseconds = "100",
+    DFIntClientPacketMaxDelayMs = "100",
+    DFIntClientPacketMaxFrameMicroseconds = "1000",
+    DFIntCodecMaxOutgoingFrames = "1000",
+    DFIntS2PhysicsSenderRate = "20",
+    DFIntPhysicsSenderMaxBandwidthBps = "50000",
+    DFIntDataSenderRate = "5000",
+}
+local function setFFlag(_jZ, _ka)
+    local _kb = tostring(_ka)
+    local _kc = tonumber(_ka)
+    local function _kd(_ke)
+        if type(_ke) ~= "function" then
+            return false
+        end
+        if pcall(_ke, _jZ, _kb) then
+            return true
+        end
+        if _kc and pcall(_ke, _jZ, _kc) then
+            return true
+        end
+        return false
+    end
+    if _kd(setfflag) then
+        return true
+    end
+    if syn and _kd(syn.setfflag) then
+        return true
+    end
+    local _kf, _kg = pcall(getgenv)
+    if _kf and _kg and _kd(_kg.setfflag) then
+        return true
+    end
+    local _kh, _ki
+    if getfenv then
+        _kh, _ki = pcall(getfenv, 0)
+        if _kh and _ki and _kd(_ki.setfflag) then
+            return true
+        end
+    end
+    if _kd(rawget(_G, "setfflag")) then
+        return true
+    end
+    return false
+end
+local function applyFlags(_kk)
+    local _kl, _km = 0, 0
+    for _kn, _ko in pairs(_kk) do
+        if setFFlag(_kn, _ko) then
+            _kl = _kl + 1
+        else
+            _km = _km + 1
+        end
+    end
+    return _kl, _km
+end
+local function setFPSBoost(_kq)
+    state.FPSBoost = _kq
+    if _kq then
+        applyFlags(fpsBoostFlags)
+    else
+        applyFlags(defaultFlags)
+    end
+end
+for _kr, _ks in ipairs({"Frame_Update", "R1QVEX_PrivateUI", "ERDN_GoldLuxuryUI", "ERDN_Main_Compat", "WindUI", "ERDN_UI"}) do
+    local _kt = PlayerGui:FindFirstChild(_ks)
+    if _kt then
+        pcall(function()
+            _kt:Destroy()
+        end)
+    end
+    local _ku = guiParent:FindFirstChild(_ks)
+    if _ku then
+        pcall(function()
+            _ku:Destroy()
+        end)
+    end
+end
+local mainGui = Instance.new("ScreenGui")
+mainGui.Name = "ERDN_Main_Compat"
+mainGui.ResetOnSpawn = false
+mainGui.IgnoreGuiInset = true
+mainGui.DisplayOrder = 0
+mainGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+mainGui.Parent = guiParent
+local WindUI = nil
+local windUiUrls = {
+    "https://github.com/Footagesus/WindUI/releases/latest/download/main.lua",
+    "https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua",
+    "https://raw.githubusercontent.com/Footagesus/WindUI/main/main.lua",
+}
+for _ky, _kz in ipairs(windUiUrls) do
+    local _kC, _kD = pcall(function()
+        local _kA = game:HttpGet(_kz)
+        if type(_kA) ~= "string" or#_kA < 500 then
+            error("fuente invalida")
+        end
+        local _kB = loadstring(_kA)
+        if not _kB then
+            error("loadstring fallo")
+        end
+        return _kB()
+    end)
+    if _kC and _kD and type(_kD) == "table" and (_kD.CreateWindow or _kD.Window) then
+        WindUI = _kD
+        break
+    end
+end
+if WindUI then
+    local _kE, _kF = pcall(function()
+        return WindUI:CreateWindow({
+            Title = "ERDN EXCLUSIVE CRACKED BY RAFAEL",
+            Icon = "crown",
+            Folder = "ERDN_GoldLuxury",
+            Size = UDim2.fromOffset(600, 460),
+            Transparent = true,
+            Theme = "Dark",
+            SideBarWidth = 180,
+            HasOutline = true,
+        })
+    end)
+    if _kE and _kF then
+        local window = _kF
+        pcall(function()
+            window:EditOpenButton({
+                Title = "ERDN CRACKED BY RAFAEL",
+                Icon = "crown",
+                Size = UDim2.fromOffset(24, 24),
+                CornerRadius = UDim.new(1, 0),
+                StrokeThickness = 1,
+                Color = ColorSequence.new(colors.goldAccent, colors.goldDark),
+                Draggable = true,
+                Enabled = true,
+            })
+        end)
+        local tabFastRep = window:Tab({Title = "Fast Rep", Icon = "zap"})
+        local tabBosses = window:Tab({Title = "Bosses", Icon = "crown"})
+        local tabAlien = window:Tab({Title = "Alien", Icon = "crosshair"})
+        local tabRebirths = window:Tab({Title = "Rebirths", Icon = "refresh-cw"})
+        local tabCombat = window:Tab({Title = "Combat", Icon = "swords"})
+        local tabUtils = window:Tab({Title = "Utils", Icon = "settings"})
+        local tabStats = window:Tab({Title = "Stats", Icon = "bar-chart-2"})
+        local _kO = tabFastRep:Section({Title = "Fast Rep", TextXAlignment = "Left"})
+        _kO:Input({
+            Title = "Rep Speed",
+            Value = "1000",
+            Type = "Input",
+            Callback = function(_kP)
+                local _kQ = tonumber(_kP)
+                if _kQ then
+                    repsPerBatch = math.clamp(math.floor(_kQ), 100, 20000)
+                end
+            end
+        })
+        _kO:Toggle({
+            Title = "Force Reps",
+            Value = false,
+            Callback = function(_kR)
+                getgenv()._AutoRepFarmEnabled = _kR
+                if _kR then
+                    local _kS = getStats()
+                    tracker.LastStr = _kS.Str
+                    tracker.TotalStr = 0
+                    tracker.FastRepStartTime = tick()
+                    tracker.SnapStr = 0
+                    tracker.SnapTime = tick()
+                end
+            end
+        })
+        local _kT = tabFastRep:Section({Title = "Auto Zero Degrees", TextXAlignment = "Left"})
+        _kT:Toggle({
+            Title = "Auto Crystal",
+            Value = false,
+            Callback = function(_kU)
+                state.AutoCrystal = _kU
+                if _kU then
+                    startAutoCrystal()
+                end
+            end
+        })
+        _kT:Toggle({
+            Title = "Auto Gym (Equipments)",
+            Value = false,
+            Callback = function(_kV)
+                state.AutoGym = _kV
+                if _kV then
+                    startAutoGym()
+                end
+            end
+        })
+        local _kW = tabBosses:Section({Title = "Boss Automation", TextXAlignment = "Left"})
+        _kW:Toggle({
+            Title = "Auto Farm Arena Bosses",
+            Value = false,
+            Callback = function(_kX)
+                if _kX then
+                    startAutoFarmBoss()
+                else
+                    stopAutoFarmBoss()
+                end
+            end
+        })
+        local _kY = tabBosses:Section({Title = "Arena Boss Selection", TextXAlignment = "Left"})
+        for _kZ, _la in ipairs(bossIds) do
+            local _lb = bossNames[_la] or _la
+            _kY:Toggle({
+                Title = _lb,
+                Value = selectedBosses[_la] == true,
+                Callback = function(_lc)
+                    selectedBosses[_la] = _lc
+                end
+            })
+        end
+        local _ld = tabAlien:Section({Title = "Alien Automation", TextXAlignment = "Left"})
+        getgenv().AlienStatusLbl = _ld:Paragraph({Title = "Status", Desc = "Idle"})
+        _ld:Toggle({
+            Title = "Auto Farm Alien Boss & Chest",
+            Value = false,
+            Callback = function(_le)
+                if _le then
+                    startAlienBossFarm()
+                else
+                    stopAlienBossFarm()
+                end
+            end
+        })
+        _ld:Toggle({
+            Title = "Auto Alien Machines (Unoccupied)",
+            Value = false,
+            Callback = function(_lf)
+                state.AutoAlienMachines = _lf
+                if _lf then
+                    startAutoAlienMachines()
+                end
+            end
+        })
+        local _lg = tabAlien:Section({Title = "Alien Shop", TextXAlignment = "Left"})
+        for _lh, _li in ipairs(alienShopItems) do
+            _lg:Toggle({
+                Title = _li.Name .. "  (" .. _li.Price .. ")",
+                Value = false,
+                Callback = function(_lj)
+                    if _lj then
+                        selectedShopItems[_li.Name] = _li
+                    else
+                        selectedShopItems[_li.Name] = nil
+                    end
+                end
+            })
+        end
+        _lg:Toggle({
+            Title = "Enable Auto Buy Alien Shop",
+            Value = false,
+            Callback = function(_lk)
+                state.AutoBuyAlienShop = _lk
+                if _lk then
+                    startAutoBuyAlienShop()
+                end
+            end
+        })
+        local _ll = tabRebirths:Section({Title = "Auto Rebirth", TextXAlignment = "Left"})
+        local _lm = false
+        local function _ln()
+            if _lm and state.AutoRebirth then
+                startFastRep(450)
+            elseif state.FastRep then
+                stopFastRep()
+            end
+        end
+        _ll:Toggle({
+            Title = "Auto Rebirth",
+            Value = false,
+            Callback = function(_lo)
+                if _lo then
+                    startAutoRebirth()
+                else
+                    state.AutoRebirth = false
+                end
+                _ln()
+            end
+        })
+        _ll:Toggle({Title = "450 Reps/s (only rebirths)", Value = false, Callback = function(_lp)
+            _lm = _lp
+            _ln()
+        end})
+        local _lq = tabRebirths:Section({Title = "Fast Rebirths", TextXAlignment = "Left"})
+        _lq:Toggle({
+            Title = "Rebirth Combination",
+            Value = false,
+            Callback = function(_lr)
+                rebirthComboOn = _lr
+                if _lr then
+                    rebirthChaosOn = false
+                    rebirthTitansOn = false
+                    local _ls = getStats()
+                    tracker.LastReb = _ls.Reb
+                    tracker.TotalReb = 0
+                    tracker.RebStartTime = tick()
+                    tracker.SnapReb = 0
+                    tracker.RebSnapTime = tick()
+                    startRebirthCombination()
+                end
+            end
+        })
+        _lq:Toggle({
+            Title = "Rebirth Chaos",
+            Value = false,
+            Callback = function(_lt)
+                rebirthChaosOn = _lt
+                if _lt then
+                    rebirthComboOn = false
+                    rebirthTitansOn = false
+                    local _lu = getStats()
+                    tracker.LastReb = _lu.Reb
+                    tracker.TotalReb = 0
+                    tracker.RebStartTime = tick()
+                    tracker.SnapReb = 0
+                    tracker.RebSnapTime = tick()
+                    startRebirthChaos()
+                end
+            end
+        })
+        _lq:Toggle({
+            Title = "Rebirth Titans",
+            Value = false,
+            Callback = function(_lv)
+                rebirthTitansOn = _lv
+                if _lv then
+                    rebirthComboOn = false
+                    rebirthChaosOn = false
+                    local _lw = getStats()
+                    tracker.LastReb = _lw.Reb
+                    tracker.TotalReb = 0
+                    tracker.RebStartTime = tick()
+                    tracker.SnapReb = 0
+                    tracker.RebSnapTime = tick()
+                    startRebirthTitans()
+                end
+            end
+        })
+        local _lx = tabCombat:Section({Title = "Auto Combat", TextXAlignment = "Left"})
+        _lx:Toggle({
+            Title = "Auto Punch",
+            Value = false,
+            Callback = function(_ly)
+                if _ly then
+                    startAutoPunch()
+                else
+                    stopAutoPunch()
+                end
+            end
+        })
+        _lx:Toggle({
+            Title = "Kill Aura",
+            Value = false,
+            Callback = function(_lz)
+                if _lz then
+                    startKillAura()
+                else
+                    state.KillAura = false
+                end
+            end
+        })
+        local _lA = tabUtils:Section({Title = "Auto Sell Pets", TextXAlignment = "Left"})
+        local _lB = _lA:Paragraph({Title = "Status", Desc = "Idle"})
+        _lA:Toggle({
+            Title = "Sell UFO Bot",
+            Value = true,
+            Callback = function(_lC)
+                autoSell.TargetPets.UFOBot = _lC
+            end
+        })
+        _lA:Toggle({
+            Title = "Keep 1 UFO Bot (sell extras only)",
+            Value = false,
+            Callback = function(_lD)
+                autoSell.KeepOneUFOBot = _lD
+            end
+        })
+        _lA:Toggle({
+            Title = "Sell Cosmic Invader",
+            Value = false,
+            Callback = function(_lE)
+                autoSell.TargetPets.CosmicInvader = _lE
+            end
+        })
+        _lA:Toggle({
+            Title = "Sell Alien Slime",
+            Value = false,
+            Callback = function(_lF)
+                autoSell.TargetPets.AlienSlime = _lF
+            end
+        })
+        _lA:Toggle({
+            Title = "Enable Auto Sell",
+            Value = false,
+            Callback = function(_lG)
+                if _lG then
+                    startAutoSell()
+                else
+                    stopAutoSell()
+                end
+            end
+        })
+        task.spawn(function()
+            while mainGui.Parent do
+                updatePara(_lB, autoSell.Status)
+                task.wait(0.5)
+            end
+        end)
+        local _lH = tabUtils:Section({Title = "System Utilities", TextXAlignment = "Left"})
+        _lH:Toggle({Title = "Anti-AFK", Value = true, Callback = function(_lI)
+            setAntiAfk(_lI)
+        end})
+        _lH:Toggle({Title = "FPS Boost", Value = false, Callback = function(_lJ)
+            setFPSBoost(_lJ)
+        end})
+        _lH:Toggle({Title = "Auto Rejoin", Value = true, Callback = function(_lK)
+            autoRejoin = _lK
+        end})
+        _lH:Toggle({Title = "Auto Execute", Value = true, Callback = function(_lL)
+            autoExecute = _lL
+        end})
+        local _lM = getStats()
+        local _lN = tabStats:Section({Title = "📈 Total Gained", TextXAlignment = "Left"})
+        local _lO = _lN:Paragraph({Title = "Strength", Desc = "Str: 0"})
+        local _lP = _lN:Paragraph({Title = "Durability", Desc = "Dur: 0"})
+        local _lQ = _lN:Paragraph({Title = "Rebirths", Desc = "Reb: 0"})
+        local _lR = tabStats:Section({Title = "⏱️ Fast Rep Time", TextXAlignment = "Left"})
+        local _lS = _lR:Paragraph({Title = "Time", Desc = "Fast Rep Time: 00:00:00"})
+        local _lT = _lR:Paragraph({Title = "Status", Desc = "Idle"})
+        local _lU = _lR:Paragraph({
+            Title = "Strength Rate",
+            Desc = "Strength:\nPer second: 0\nPer minute: 0\nPer hour: 0\nPer day: 0\nPer week: 0"
+        })
+        local _lV = _lR:Paragraph({
+            Title = "Durability Rate",
+            Desc = "Durability:\nPer second: 0\nPer minute: 0\nPer hour: 0\nPer day: 0\nPer week: 0"
+        })
+        local _lW = tabStats:Section({Title = "🔄 Rebirth Time", TextXAlignment = "Left"})
+        local _lX = _lW:Paragraph({Title = "Time", Desc = "Rebirth Time: 00:00:00"})
+        local _lY = _lW:Paragraph({Title = "Status", Desc = "Idle"})
+        local _lZ = _lW:Paragraph({
+            Title = "Rebirth Rate",
+            Desc = "Rebirths:\nPer second: 0\nPer minute: 0\nPer hour: 0\nPer day: 0\nPer week: 0"
+        })
+        local _ma = tabStats:Section({Title = "📊 Stat Progress", TextXAlignment = "Left"})
+        local _mb = _ma:Paragraph({Title = "Strength", Desc = "Strength: 0"})
+        local _mc = _ma:Paragraph({Title = "Durability", Desc = "Durability: 0"})
+        local _md = _ma:Paragraph({Title = "Rebirths", Desc = "Rebirths: 0"})
+        task.spawn(function()
+            while mainGui.Parent do
+                local _me = getStats()
+                local _mf = tick()
+                local _mg = state.FastRep or getgenv()._AutoRepFarmEnabled
+                if _mg then
+                    if _me.Str > tracker.LastStr then
+                        tracker.TotalStr = tracker.TotalStr + (_me.Str - tracker.LastStr)
+                    end
+                    tracker.LastStr = _me.Str
+                    local _mh = _mf - tracker.SnapTime
+                    updatePara(_lS, "Fast Rep Time: " .. formatDuration(_mf - tracker.FastRepStartTime))
+                    if _mh >= 10 then
+                        local _mi = (tracker.TotalStr - tracker.SnapStr) / _mh
+                        updatePara(_lU, "Strength:\n" .. formatRates(_mi))
+                        updatePara(_lV, "Durability:\n" .. formatRates(0))
+                        updatePara(_lT, "Updated (10s)")
+                        tracker.SnapStr = tracker.TotalStr
+                        tracker.SnapTime = _mf
+                    end
+                else
+                    tracker.TotalStr = 0
+                    tracker.TotalDur = 0
+                    updatePara(_lS, "Fast Rep Time: 00:00:00")
+                    updatePara(_lT, "Idle")
+                    updatePara(_lU, "Strength:\n" .. formatRates(0))
+                    updatePara(_lV, "Durability:\n" .. formatRates(0))
+                end
+                local _mj = state.AutoRebirth or rebirthComboOn or rebirthChaosOn or rebirthTitansOn
+                if _mj then
+                    if _me.Reb > tracker.LastReb then
+                        tracker.TotalReb = tracker.TotalReb + (_me.Reb - tracker.LastReb)
+                    end
+                    tracker.LastReb = _me.Reb
+                    local _mk = _mf - tracker.RebSnapTime
+                    updatePara(_lX, "Rebirth Time: " .. formatDuration(_mf - tracker.RebStartTime))
+                    if _mk >= 10 then
+                        local _ml = (tracker.TotalReb - tracker.SnapReb) / _mk
+                        updatePara(_lZ, "Rebirths:\n" .. formatRates(_ml))
+                        updatePara(_lY, "Updated (10s)")
+                        tracker.SnapReb = tracker.TotalReb
+                        tracker.RebSnapTime = _mf
+                    end
+                else
+                    updatePara(_lX, "Rebirth Time: 00:00:00")
+                    updatePara(_lY, "Idle")
+                    updatePara(_lZ, "Rebirths:\n" .. formatRates(0))
+                end
+                updatePara(_lO, "Str: " .. formatNumber(tracker.TotalStr))
+                updatePara(_lP, "Dur: " .. formatNumber(tracker.TotalDur))
+                updatePara(_lQ, "Reb: " .. formatNumber(tracker.TotalReb))
+                updatePara(_mb, "Strength: " .. formatNumber(_me.Str) .. "  |  Gained: " .. formatNumber(_me.Str - _lM.Str))
+                updatePara(_mc, "Durability: " .. formatNumber(_me.Dur) .. "  |  Gained: " .. formatNumber(_me.Dur - _lM.Dur))
+                updatePara(_md, "Rebirths: " .. formatNumber(_me.Reb) .. "  |  Gained: " .. formatNumber(_me.Reb - _lM.Reb))
+                task.wait(0.1)
+            end
+        end)
+    else
+        WindUI = nil
+    end
+end
+if not WindUI then
+    local fallbackGui = Instance.new("ScreenGui")
+    fallbackGui.Name = "ERDN_FallbackUI"
+    fallbackGui.ResetOnSpawn = false
+    fallbackGui.IgnoreGuiInset = true
+    fallbackGui.DisplayOrder = 9999
+    fallbackGui.Parent = guiParent
+    local _mn = Instance.new("Frame")
+    _mn.Size = UDim2.new(0, 280, 0, 420)
+    _mn.Position = UDim2.new(0, 20, 0.5, -210)
+    _mn.BackgroundColor3 = Color3.fromRGB(15, 14, 18)
+    _mn.BorderSizePixel = 0
+    _mn.Active = true
+    _mn.Draggable = true
+    _mn.Parent = fallbackGui
+    local _mo = Instance.new("UICorner")
+    _mo.CornerRadius = UDim.new(0, 10)
+    _mo.Parent = _mn
+    local _mp = Instance.new("UIStroke")
+    _mp.Color = Color3.fromRGB(255, 215, 0)
+    _mp.Thickness = 1.5
+    _mp.Parent = _mn
+    local _mq = Instance.new("TextLabel")
+    _mq.Size = UDim2.new(1, 0, 0, 30)
+    _mq.BackgroundColor3 = Color3.fromRGB(255, 215, 0)
+    _mq.Text = "ERDN • Fallback UI"
+    _mq.TextColor3 = Color3.fromRGB(15, 14, 18)
+    _mq.Font = Enum.Font.GothamBlack
+    _mq.TextSize = 12
+    _mq.Parent = _mn
+    local _mr = Instance.new("UICorner")
+    _mr.CornerRadius = UDim.new(0, 10)
+    _mr.Parent = _mq
+    local _ms = Instance.new("TextLabel")
+    _ms.Size = UDim2.new(1, -12, 0, 30)
+    _ms.Position = UDim2.new(0, 6, 0, 36)
+    _ms.BackgroundTransparency = 1
+    _ms.Text = "⚠ WindUI no cargó. Verifica HttpGet en tu executor."
+    _ms.TextColor3 = Color3.fromRGB(255, 200, 100)
+    _ms.Font = Enum.Font.GothamBold
+    _ms.TextSize = 9
+    _ms.TextWrapped = true
+    _ms.Parent = _mn
+    local _mt = Instance.new("ScrollingFrame")
+    _mt.Size = UDim2.new(1, -12, 1, -76)
+    _mt.Position = UDim2.new(0, 6, 0, 70)
+    _mt.BackgroundTransparency = 1
+    _mt.BorderSizePixel = 0
+    _mt.ScrollBarThickness = 3
+    _mt.ScrollBarImageColor3 = Color3.fromRGB(255, 215, 0)
+    _mt.CanvasSize = UDim2.new(0, 0, 0, 0)
+    _mt.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    _mt.Parent = _mn
+    local _mu = Instance.new("UIListLayout")
+    _mu.Padding = UDim.new(0, 4)
+    _mu.SortOrder = Enum.SortOrder.LayoutOrder
+    _mu.Parent = _mt
+    local function addToggleButton(_mw, _mx, _my)
+        local _mz = Instance.new("TextButton")
+        _mz.Size = UDim2.new(1, -4, 0, 26)
+        _mz.TextColor3 = _my and Color3.fromRGB(15, 14, 18) or Color3.fromRGB(255, 255, 255)
+        _mz.BackgroundColor3 = _my and Color3.fromRGB(255, 215, 0) or Color3.fromRGB(22, 20, 26)
+        _mz.Text = _mw
+        _mz.Font = Enum.Font.GothamBold
+        _mz.TextSize = 10
+        _mz.AutoButtonColor = false
+        _mz.Parent = _mt
+        local _mA = Instance.new("UICorner")
+        _mA.CornerRadius = UDim.new(0, 6)
+        _mA.Parent = _mz
+        local _mB = Instance.new("UIStroke")
+        _mB.Color = Color3.fromRGB(218, 165, 32)
+        _mB.Thickness = 0.8
+        _mB.Parent = _mz
+        local _mC = _my
+        _mz.MouseButton1Click:Connect(function()
+            _mC = not _mC
+            _mz.BackgroundColor3 = _mC and Color3.fromRGB(255, 215, 0) or Color3.fromRGB(22, 20, 26)
+            _mz.TextColor3 = _mC and Color3.fromRGB(15, 14, 18) or Color3.fromRGB(255, 255, 255)
+            _mx(_mC)
+        end)
+    end
+    addToggleButton("⚡ Force Reps", function(_mD)
+        getgenv()._AutoRepFarmEnabled = _mD
+    end, false)
+    addToggleButton("🔄 Auto Rebirth", function(_mE)
+        if _mE then
+            startAutoRebirth()
+        else
+            state.AutoRebirth = false
+        end
+    end, false)
+    addToggleButton("👑 Auto Farm Arena Boss", function(_mF)
+        if _mF then
+            startAutoFarmBoss()
+        else
+            stopAutoFarmBoss()
+        end
+    end, false)
+    addToggleButton("👽 Auto Farm Alien Boss & Chest", function(_mG)
+        if _mG then
+            startAlienBossFarm()
+        else
+            stopAlienBossFarm()
+        end
+    end, false)
+    addToggleButton("👽 Auto Alien Machines", function(_mH)
+        state.AutoAlienMachines = _mH
+        if _mH then
+            startAutoAlienMachines()
+        end
+    end, false)
+    addToggleButton("⚔️ Auto Punch", function(_mI)
+        if _mI then
+            startAutoPunch()
+        else
+            stopAutoPunch()
+        end
+    end, false)
+    addToggleButton("💀 Kill Aura", function(_mJ)
+        state.KillAura = _mJ
+        if _mJ then
+            startKillAura()
+        end
+    end, false)
+    addToggleButton("💎 Auto Crystal", function(_mK)
+        state.AutoCrystal = _mK
+        if _mK then
+            startAutoCrystal()
+        end
+    end, false)
+    addToggleButton("🏋️ Auto Gym", function(_mL)
+        state.AutoGym = _mL
+        if _mL then
+            startAutoGym()
+        end
+    end, false)
+    addToggleButton("💰 Auto Sell UFO Bot", function(_mM)
+        if _mM then
+            startAutoSell()
+        else
+            stopAutoSell()
+        end
+    end, false)
+    addToggleButton("🛡️ Anti-AFK", function(_mN)
+        setAntiAfk(_mN)
+    end, true)
+    addToggleButton("🚀 FPS Boost", function(_mO)
+        setFPSBoost(_mO)
+    end, false)
+    addToggleButton("🔁 Auto Rejoin", function(_mP)
+        autoRejoin = _mP
+    end, true)
+    addToggleButton("📜 Auto Execute", function(_mQ)
+        autoExecute = _mQ
+    end, true)
+end
